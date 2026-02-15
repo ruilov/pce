@@ -1816,17 +1816,21 @@
         const meta = model.metaByLine.get(line);
         if (!meta) return;
         out.push({ type: "component", line, depth, meta });
-        if (coreContrib && state.expanded.has(line) && isCoreDeltaEligibleLine(model, line, activeParentLine)) {
+        const showCoreDelta = coreContrib
+          && line === activeParentLine
+          && state.expanded.has(line)
+          && isCoreDeltaEligibleLine(model, line, activeParentLine);
+        if (!state.expanded.has(line)) return;
+        const children = getIncludedChildren(model, line);
+        for (const child of children) walk(child, depth + 1);
+        if (showCoreDelta) {
           out.push({
             type: "core_delta",
             line,
             depth: depth + 1,
-            label: `Delta vs official (${getCoreComparatorLabel(line)})`,
+            label: "Delta vs official",
           });
         }
-        if (!state.expanded.has(line)) return;
-        const children = getIncludedChildren(model, line);
-        for (const child of children) walk(child, depth + 1);
       };
       walk(activeParentLine, 0);
       return out;
