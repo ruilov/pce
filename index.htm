@@ -2630,6 +2630,8 @@
         });
       }
       if (!rows.length) return null;
+      const residualIdx = rows.findIndex((r) => r.id === "residual-total");
+      if (residualIdx >= 0) rows.push(rows.splice(residualIdx, 1)[0]);
 
       const categories = rows.map((r) => r.label);
       const connectorData = [];
@@ -2732,16 +2734,23 @@
             id: "compare-a",
             name: labelA,
             type: "scatter",
-            symbolSize: 10,
+            symbolSize: 14,
             itemStyle: { color: "#63A7FF" },
             data: pointAData,
+            markLine: {
+              symbol: "none",
+              silent: true,
+              label: { show: false },
+              lineStyle: { color: "#9BB8DC", width: 2.2 },
+              data: [{ xAxis: 0 }],
+            },
           },
           {
             id: "compare-b",
             name: labelB,
             type: "scatter",
             symbol: "diamond",
-            symbolSize: 11,
+            symbolSize: 15,
             itemStyle: { color: "#FFD166" },
             data: pointBData,
           },
