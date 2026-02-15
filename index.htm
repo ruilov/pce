@@ -66,6 +66,12 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(6px);
     }
+    .compare-controls {
+      top: 86px;
+      z-index: 19;
+      margin-top: 0;
+    }
+    .compare-controls[hidden] { display: none !important; }
     label {
       display: inline-flex;
       align-items: center;
@@ -281,6 +287,8 @@
     .chart-legend-draggable.dragging { opacity: 0.5; cursor: grabbing; }
     .chart-legend-draggable.drag-over-before { border-top-color: var(--accent); }
     .chart-legend-draggable.drag-over-after { border-bottom-color: var(--accent); }
+    .quant-chart-panel.compare-grouping .chart-legend-panel { display: none; }
+    .quant-chart-panel.compare-grouping .chart-main { flex: 1 1 100%; }
     .muted { color: var(--text-3); font-size: 12px; }
     .error { color: var(--danger); white-space: pre-wrap; }
     code {
@@ -334,6 +342,7 @@
         <option value="quarter">Quarter</option>
         <option value="year">Year</option>
         <option value="period">Entire period</option>
+        <option value="compare">Compare</option>
       </select>
     </label>
     <label>Mode:
@@ -343,6 +352,17 @@
       </select>
     </label>
     <button id="resetParent" disabled>Reset to PCE</button>
+  </div>
+
+  <div class="row compare-controls" id="compareControls" hidden>
+    <label>B Start (MM/YYYY):
+      <select id="compareStartMonth"></select>
+      <select id="compareStartYear"></select>
+    </label>
+    <label>B End (MM/YYYY):
+      <select id="compareEndMonth"></select>
+      <select id="compareEndYear"></select>
+    </label>
   </div>
 
   <div id="out"></div>
@@ -370,6 +390,7 @@
       quarter: { label: "Quarter" },
       year: { label: "Year" },
       period: { label: "Entire period" },
+      compare: { label: "Compare" },
     };
     const DEFAULT_COLUMN_MODE = "quarter";
     const MIN_SELECTABLE_YEAR = 1950;
@@ -391,6 +412,11 @@
     const columnsEl = document.getElementById("columns");
     const coreModeEl = document.getElementById("coreMode");
     const resetParentBtn = document.getElementById("resetParent");
+    const compareControlsEl = document.getElementById("compareControls");
+    const compareStartMonthEl = document.getElementById("compareStartMonth");
+    const compareStartYearEl = document.getElementById("compareStartYear");
+    const compareEndMonthEl = document.getElementById("compareEndMonth");
+    const compareEndYearEl = document.getElementById("compareEndYear");
 
     const csvRowsCache = new Map();
     const state = {
@@ -410,6 +436,8 @@
       coreIdentityStatus: "failed",
       coreOfficialComparatorByLine: new Map(),
       coreDeltaEligibleAncestors: new Set(),
+      compareRangeInitialized: false,
+      compareRangeUserEdited: false,
       defaultsInitializedFromData: false,
       seriesColorById: new Map(),
       tableInstance: null,
@@ -480,6 +508,29 @@
     function getSelectedYmRange() {
       const startYM = composeYmFromSelectors(startMonthEl, startYearEl);
       const endYM = composeYmFromSelectors(endMonthEl, endYearEl);
+      return {
+        startYM,
+        endYM,
+        valid: Boolean(startYM && endYM && startYM <= endYM),
+      };
+    }
+
+    function isCompareGroupingSelected() {
+      return String(columnsEl.value || "") === "compare";
+    }
+
+    function isCompareGroupingMode() {
+      return state.columnMode === "compare";
+    }
+
+    function updateCompareControlsVisibility() {
+      if (!compareControlsEl) return;
+      compareControlsEl.hidden = !isCompareGroupingSelected();
+    }
+
+    function getCompareYmRange() {
+      const startYM = composeYmFromSelectors(compareStartMonthEl, compareStartYearEl);
+      const endYM = composeYmFromSelectors(compareEndMonthEl, compareEndYearEl);
       return {
         startYM,
         endYM,
@@ -616,6 +667,25 @@
         }
       }
       return out;
+    }
+
+    function initializeCompareRangeFromMainRange() {
+      const selected = getSelectedYmRange();
+      if (!selected.valid) return false;
+      const startTP = ymToTimePeriod(selected.startYM);
+      const endTP = ymToTimePeriod(selected.endYM);
+      const monthsA = buildMonthRange(startTP, endTP);
+      if (!monthsA.length) return false;
+
+      const compareEndYM = subtractMonthsFromYm(selected.startYM, 1);
+      if (!compareEndYM) return false;
+      const compareStartYM = subtractMonthsFromYm(compareEndYM, monthsA.length - 1);
+      if (!compareStartYM || compareStartYM > compareEndYM) return false;
+
+      setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
+      setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
+      state.compareRangeInitialized = true;
+      return true;
     }
 
     function getQuarterFromMonth(month) {
@@ -2032,6 +2102,11 @@
 
     function buildTableRowsForTabulator(visibleRows, model, periodBuckets, metricKey, activeParentLine) {
       const rows = [];
+      const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
+      const bucketA = compareMode ? periodBuckets[0] : null;
+      const bucketB = compareMode ? periodBuckets[1] : null;
+      const monthsA = bucketA && Array.isArray(bucketA.months) ? bucketA.months.length : 0;
+      const monthsB = bucketB && Array.isArray(bucketB.months) ? bucketB.months.length : 0;
       for (let i = 0; i < visibleRows.length; i++) {
         const row = visibleRows[i];
         const base = {
@@ -2079,6 +2154,16 @@
           }
         }
 
+        if (compareMode) {
+          const rawA = base[getBucketFieldKey(0)];
+          const rawB = base[getBucketFieldKey(1)];
+          const displayedA = getDisplayedMetricValue(metricKey, rawA, monthsA);
+          const displayedB = getDisplayedMetricValue(metricKey, rawB, monthsB);
+          base.compareDelta = (Number.isFinite(displayedA) && Number.isFinite(displayedB))
+            ? (displayedB - displayedA)
+            : null;
+        }
+
         rows.push(base);
       }
       return rows;
@@ -2114,6 +2199,7 @@
 
     function buildTableColumnsForTabulator(periodBuckets, metricKey) {
       const numericWidth = computeNumericColumnWidth(periodBuckets);
+      const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
       const staticCols = [
         {
           title: "Expand",
@@ -2180,25 +2266,84 @@
         },
       ];
 
-      const dynamicCols = periodBuckets.map((bucket, idx) => ({
-        title: bucket.label,
-        field: getBucketFieldKey(idx),
-        width: numericWidth,
-        minWidth: numericWidth,
-        maxWidth: numericWidth,
-        widthGrow: 0,
-        widthShrink: 0,
-        headerSort: false,
-        hozAlign: "right",
-        cssClass: "quant-cell-number",
-        formatter: (cell) => {
-          const v = cell.getValue();
-          if (v === null || v === undefined || Number.isNaN(v)) return "";
-          const monthCount = Array.isArray(bucket.months) ? bucket.months.length : 0;
-          const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
-          return formatDisplayedMetricValue(metricKey, displayed);
-        },
-      }));
+      let dynamicCols = [];
+      if (compareMode) {
+        const bucketA = periodBuckets[0];
+        const bucketB = periodBuckets[1];
+        dynamicCols = [
+          {
+            title: "A",
+            field: getBucketFieldKey(0),
+            width: 86,
+            minWidth: 86,
+            maxWidth: 86,
+            widthGrow: 0,
+            widthShrink: 0,
+            headerSort: false,
+            hozAlign: "right",
+            cssClass: "quant-cell-number",
+            formatter: (cell) => {
+              const v = cell.getValue();
+              if (v === null || v === undefined || Number.isNaN(v)) return "";
+              const monthCount = Array.isArray(bucketA && bucketA.months) ? bucketA.months.length : 0;
+              const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+              return formatDisplayedMetricValue(metricKey, displayed);
+            },
+          },
+          {
+            title: "B",
+            field: getBucketFieldKey(1),
+            width: 86,
+            minWidth: 86,
+            maxWidth: 86,
+            widthGrow: 0,
+            widthShrink: 0,
+            headerSort: false,
+            hozAlign: "right",
+            cssClass: "quant-cell-number",
+            formatter: (cell) => {
+              const v = cell.getValue();
+              if (v === null || v === undefined || Number.isNaN(v)) return "";
+              const monthCount = Array.isArray(bucketB && bucketB.months) ? bucketB.months.length : 0;
+              const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+              return formatDisplayedMetricValue(metricKey, displayed);
+            },
+          },
+          {
+            title: "Delta (B-A)",
+            field: "compareDelta",
+            width: 100,
+            minWidth: 100,
+            maxWidth: 100,
+            widthGrow: 0,
+            widthShrink: 0,
+            headerSort: false,
+            hozAlign: "right",
+            cssClass: "quant-cell-number",
+            formatter: (cell) => formatDisplayedMetricValue(metricKey, cell.getValue()),
+          },
+        ];
+      } else {
+        dynamicCols = periodBuckets.map((bucket, idx) => ({
+          title: bucket.label,
+          field: getBucketFieldKey(idx),
+          width: numericWidth,
+          minWidth: numericWidth,
+          maxWidth: numericWidth,
+          widthGrow: 0,
+          widthShrink: 0,
+          headerSort: false,
+          hozAlign: "right",
+          cssClass: "quant-cell-number",
+          formatter: (cell) => {
+            const v = cell.getValue();
+            if (v === null || v === undefined || Number.isNaN(v)) return "";
+            const monthCount = Array.isArray(bucket.months) ? bucket.months.length : 0;
+            const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+            return formatDisplayedMetricValue(metricKey, displayed);
+          },
+        }));
+      }
 
       return [...staticCols, ...dynamicCols];
     }
@@ -2282,6 +2427,7 @@
     }
 
     function getSeriesForStackDrawing(legendOrderedSeries, metricKey, columnMode) {
+      if (columnMode === "compare") return [...legendOrderedSeries];
       const isPeriod = columnMode === "period";
       const isStackedType = !isPeriod || (metricKey === "contrib_pp");
       if (!isStackedType) return [...legendOrderedSeries];
@@ -2459,18 +2605,171 @@
       };
     }
 
+    function buildCompareDumbbellOption(series, metricKey, buckets) {
+      if (!Array.isArray(buckets) || buckets.length < 2) return null;
+      const bucketA = buckets[0];
+      const bucketB = buckets[1];
+      const monthCountA = Array.isArray(bucketA && bucketA.months) ? bucketA.months.length : 0;
+      const monthCountB = Array.isArray(bucketB && bucketB.months) ? bucketB.months.length : 0;
+      const labelA = `A (${String(bucketA && bucketA.startYM ? bucketA.startYM : "A")} to ${String(bucketA && bucketA.endYM ? bucketA.endYM : "")})`;
+      const labelB = `B (${String(bucketB && bucketB.startYM ? bucketB.startYM : "B")} to ${String(bucketB && bucketB.endYM ? bucketB.endYM : "")})`;
+
+      const rows = [];
+      for (const s of series) {
+        const rawA = Array.isArray(s.values) ? s.values[0] : null;
+        const rawB = Array.isArray(s.values) ? s.values[1] : null;
+        const valueA = getDisplayedMetricValue(metricKey, rawA, monthCountA);
+        const valueB = getDisplayedMetricValue(metricKey, rawB, monthCountB);
+        if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) continue;
+        rows.push({
+          id: s.id,
+          label: s.label,
+          valueA,
+          valueB,
+          delta: (Number.isFinite(valueA) && Number.isFinite(valueB)) ? (valueB - valueA) : null,
+        });
+      }
+      if (!rows.length) return null;
+
+      const categories = rows.map((r) => r.label);
+      const connectorData = [];
+      const pointAData = [];
+      const pointBData = [];
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (Number.isFinite(r.valueA) && Number.isFinite(r.valueB)) {
+          connectorData.push({ value: [i, r.valueA, r.valueB], rowIndex: i });
+        }
+        if (Number.isFinite(r.valueA)) pointAData.push({ value: [r.valueA, i], rowIndex: i });
+        if (Number.isFinite(r.valueB)) pointBData.push({ value: [r.valueB, i], rowIndex: i });
+      }
+
+      const formatTooltip = (row) => {
+        if (!row) return "";
+        const aText = Number.isFinite(row.valueA) ? formatDisplayedMetricValue(metricKey, row.valueA) : "n/a";
+        const bText = Number.isFinite(row.valueB) ? formatDisplayedMetricValue(metricKey, row.valueB) : "n/a";
+        const dText = Number.isFinite(row.delta) ? formatDisplayedMetricValue(metricKey, row.delta) : "n/a";
+        return `${escapeHtml(row.label)}<br/>A: ${escapeHtml(aText)}<br/>B: ${escapeHtml(bText)}<br/>Delta (B-A): ${escapeHtml(dText)}`;
+      };
+
+      return {
+        animation: false,
+        backgroundColor: "transparent",
+        legend: {
+          top: 4,
+          right: 8,
+          icon: "circle",
+          itemWidth: 9,
+          itemHeight: 9,
+          textStyle: { color: "#a9b7cb", fontFamily: "Inter, sans-serif", fontSize: 11 },
+          data: [labelA, labelB],
+        },
+        tooltip: {
+          trigger: "item",
+          backgroundColor: "rgba(18, 28, 44, 0.96)",
+          borderColor: "#2f4a6a",
+          borderWidth: 1,
+          textStyle: {
+            fontFamily: "JetBrains Mono, monospace",
+            color: "#dce8fa",
+            fontSize: 12,
+          },
+          extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
+          formatter: (p) => {
+            if (!p || !p.data) return "";
+            const rowIndex = Number(p.data.rowIndex);
+            const row = Number.isFinite(rowIndex) ? rows[rowIndex] : null;
+            return formatTooltip(row);
+          },
+        },
+        grid: { left: 210, right: 24, top: 36, bottom: 18 },
+        xAxis: {
+          type: "value",
+          axisLabel: {
+            color: "#a9b7cb",
+            fontFamily: "JetBrains Mono, monospace",
+            formatter: (v) => formatDisplayedMetricValue(metricKey, Number(v)),
+          },
+          splitLine: { lineStyle: { color: "rgba(69, 97, 135, 0.35)" } },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { lineStyle: { color: "#304661" } },
+        },
+        yAxis: {
+          type: "category",
+          inverse: true,
+          data: categories,
+          axisLabel: {
+            color: "#a9b7cb",
+            fontFamily: "Inter, sans-serif",
+            fontSize: 11,
+            overflow: "truncate",
+            width: 196,
+          },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { show: false },
+        },
+        series: [
+          {
+            id: "compare-connector",
+            type: "custom",
+            name: "Connector",
+            silent: true,
+            data: connectorData,
+            renderItem: (params, api) => {
+              const rowIdx = api.value(0);
+              const a = api.value(1);
+              const b = api.value(2);
+              const p1 = api.coord([a, rowIdx]);
+              const p2 = api.coord([b, rowIdx]);
+              return {
+                type: "line",
+                shape: { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1] },
+                style: { stroke: "rgba(137, 166, 207, 0.62)", lineWidth: 2 },
+              };
+            },
+          },
+          {
+            id: "compare-a",
+            name: labelA,
+            type: "scatter",
+            symbolSize: 10,
+            itemStyle: { color: "#63A7FF" },
+            data: pointAData,
+          },
+          {
+            id: "compare-b",
+            name: labelB,
+            type: "scatter",
+            symbol: "diamond",
+            symbolSize: 11,
+            itemStyle: { color: "#FFD166" },
+            data: pointBData,
+          },
+        ],
+      };
+    }
+
     function renderChartWithECharts({ buckets, series, metricKey, columnMode, stackOrderSignature = "" }) {
+      const compareMode = columnMode === "compare";
       const legendSeries = series;
       const plotSeries = getSeriesForStackDrawing(legendSeries, metricKey, columnMode);
 
-      renderLegendPanel(legendSeries, stackOrderSignature);
+      if (state.chartWrapEl) state.chartWrapEl.classList.toggle("compare-grouping", compareMode);
+      if (compareMode) {
+        if (state.legendHostEl) state.legendHostEl.innerHTML = "";
+        if (state.chartWrapEl) state.chartWrapEl.setAttribute("data-stack-order", "");
+      } else {
+        renderLegendPanel(legendSeries, stackOrderSignature);
+      }
       if (!buckets.length || !series.length) {
         showChartEmpty("No chartable data for current selection.");
         return;
       }
 
       let option = null;
-      if (columnMode === "period" && buckets.length === 1) {
+      if (compareMode) {
+        option = buildCompareDumbbellOption(legendSeries, metricKey, buckets);
+      } else if (columnMode === "period" && buckets.length === 1) {
         if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], legendSeries, metricKey);
         else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
       } else {
@@ -2505,8 +2804,8 @@
 
       const startTP = ymToTimePeriod(startYM);
       const endTP = ymToTimePeriod(endYM);
-      const months = buildMonthRange(startTP, endTP);
-      if (!months.length) {
+      const monthsA = buildMonthRange(startTP, endTP);
+      if (!monthsA.length) {
         if (showErrors) {
           setError("Selected month range is invalid.");
           setStatus("Error");
@@ -2515,19 +2814,66 @@
       }
 
       const columnMode = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
-      const periodBuckets = buildPeriodBuckets(months, columnMode, startYM, endYM);
-      if (!periodBuckets.length) {
-        if (showErrors) {
-          setError("No columns available for selected mode/range.");
-          setStatus("Error");
+      let months = monthsA;
+      let periodBuckets = [];
+      if (columnMode === "compare") {
+        if (!state.compareRangeInitialized || !state.compareRangeUserEdited) {
+          initializeCompareRangeFromMainRange();
         }
-        return null;
+        const compareRange = getCompareYmRange();
+        if (!compareRange.valid) {
+          if (showErrors) {
+            if (!compareRange.startYM || !compareRange.endYM) setError("Please choose both Period B start and end months.");
+            else setError("Period B start must be <= end.");
+            setStatus("Error");
+          }
+          return null;
+        }
+
+        const compareMonths = buildMonthRange(ymToTimePeriod(compareRange.startYM), ymToTimePeriod(compareRange.endYM));
+        if (!compareMonths.length) {
+          if (showErrors) {
+            setError("Selected Period B range is invalid.");
+            setStatus("Error");
+          }
+          return null;
+        }
+        state.compareRangeInitialized = true;
+
+        periodBuckets = [
+          {
+            id: `compare:A:${startYM}:${endYM}`,
+            label: "A",
+            months: [...monthsA],
+            startYM,
+            endYM,
+            role: "A",
+          },
+          {
+            id: `compare:B:${compareRange.startYM}:${compareRange.endYM}`,
+            label: "B",
+            months: [...compareMonths],
+            startYM: compareRange.startYM,
+            endYM: compareRange.endYM,
+            role: "B",
+          },
+        ];
+      } else {
+        periodBuckets = buildPeriodBuckets(monthsA, columnMode, startYM, endYM);
+        if (!periodBuckets.length) {
+          if (showErrors) {
+            setError("No columns available for selected mode/range.");
+            setStatus("Error");
+          }
+          return null;
+        }
       }
 
       state.columnMode = columnMode;
       state.months = months;
       state.periodBuckets = periodBuckets;
       state.chartSeriesCache = new Map();
+      updateCompareControlsVisibility();
 
       if (state.model) {
         setError("");
@@ -2698,12 +3044,19 @@
     const def = defaultRangeLastMonths(36);
     populateMonthOptions(startMonthEl);
     populateMonthOptions(endMonthEl);
+    populateMonthOptions(compareStartMonthEl);
+    populateMonthOptions(compareEndMonthEl);
     populateYearOptions(startYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
     populateYearOptions(endYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
+    populateYearOptions(compareStartYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
+    populateYearOptions(compareEndYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
     setSelectorsFromYm(startMonthEl, startYearEl, def.start);
     setSelectorsFromYm(endMonthEl, endYearEl, def.end);
+    setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, def.start);
+    setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, def.end);
     columnsEl.value = DEFAULT_COLUMN_MODE;
     coreModeEl.value = state.coreMode;
+    updateCompareControlsVisibility();
 
     resetParentBtn.addEventListener("click", () => {
       if (!state.model) return;
@@ -2713,6 +3066,10 @@
       if (state.model) renderPivot();
     });
     columnsEl.addEventListener("change", () => {
+      updateCompareControlsVisibility();
+      if (isCompareGroupingSelected() && (!state.compareRangeInitialized || !state.compareRangeUserEdited)) {
+        initializeCompareRangeFromMainRange();
+      }
       if (!state.model) return;
       applyDateRangeToView({ showErrors: false });
     });
@@ -2731,7 +3088,18 @@
     });
     for (const el of [startMonthEl, startYearEl, endMonthEl, endYearEl]) {
       el.addEventListener("change", () => {
+        if (isCompareGroupingSelected() && !state.compareRangeUserEdited) {
+          initializeCompareRangeFromMainRange();
+        }
         if (!state.model) return;
+        applyDateRangeToView({ showErrors: false });
+      });
+    }
+    for (const el of [compareStartMonthEl, compareStartYearEl, compareEndMonthEl, compareEndYearEl]) {
+      el.addEventListener("change", () => {
+        state.compareRangeUserEdited = true;
+        state.compareRangeInitialized = true;
+        if (!state.model || !isCompareGroupingSelected()) return;
         applyDateRangeToView({ showErrors: false });
       });
     }
