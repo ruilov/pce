@@ -1676,6 +1676,43 @@
       state.plotSelectedByLine.set(line, Boolean(checked));
     }
 
+    function getPlotToggleTargets(model, line, { includeSelf = true } = {}) {
+      const out = [];
+      if (!model || !model.metaByLine.has(line)) return out;
+      const seen = new Set();
+      const walk = (cur) => {
+        if (!model.metaByLine.has(cur)) return;
+        if (seen.has(cur)) return;
+        seen.add(cur);
+        out.push(cur);
+        const children = getIncludedChildren(model, cur);
+        for (const child of children) walk(child);
+      };
+      walk(line);
+      if (!includeSelf) return out.filter((v) => v !== line);
+      return out;
+    }
+
+    function getPlotSelectionStateForLine(model, line, cache = null) {
+      const memo = cache || new Map();
+      if (memo.has(line)) return memo.get(line);
+      const targets = getPlotToggleTargets(model, line, { includeSelf: true });
+      if (!targets.length) {
+        const fallback = isLineSelectedForPlot(line) ? "checked" : "unchecked";
+        memo.set(line, fallback);
+        return fallback;
+      }
+      let selectedCount = 0;
+      for (const target of targets) {
+        if (isLineSelectedForPlot(target)) selectedCount += 1;
+      }
+      const stateValue = (selectedCount === targets.length)
+        ? "checked"
+        : (selectedCount === 0 ? "unchecked" : "indeterminate");
+      memo.set(line, stateValue);
+      return stateValue;
+    }
+
     function prunePlotSelectionToModel(model) {
       const next = new Map();
       for (const [line, selected] of state.plotSelectedByLine.entries()) {
@@ -2107,6 +2144,7 @@
       const bucketB = compareMode ? periodBuckets[1] : null;
       const monthsA = bucketA && Array.isArray(bucketA.months) ? bucketA.months.length : 0;
       const monthsB = bucketB && Array.isArray(bucketB.months) ? bucketB.months.length : 0;
+      const plotStateCache = new Map();
       for (let i = 0; i < visibleRows.length; i++) {
         const row = visibleRows[i];
         const base = {
@@ -2119,6 +2157,7 @@
           isActiveParent: false,
           plotSelectable: false,
           plotSelected: false,
+          plotIndeterminate: false,
           componentLabel: "",
           titleText: "",
         };
@@ -2131,7 +2170,11 @@
           base.isExpanded = state.expanded.has(row.line);
           base.isActiveParent = isActiveParent;
           base.plotSelectable = row.line !== model.rootLine;
-          base.plotSelected = isLineSelectedForPlot(row.line);
+          if (base.plotSelectable) {
+            const plotState = getPlotSelectionStateForLine(model, row.line, plotStateCache);
+            base.plotSelected = plotState === "checked";
+            base.plotIndeterminate = plotState === "indeterminate";
+          }
           base.componentLabel = String(row.meta.desc || `Line ${row.line}`);
           base.titleText = `Line ${row.line} | Nominal: ${row.meta.nominalSeriesCode || ""} | Price: ${row.meta.priceSeriesCode || ""}`;
           for (let b = 0; b < periodBuckets.length; b++) {
@@ -2247,7 +2290,8 @@
             const data = cell.getData();
             if (data.rowType !== "component" || !data.plotSelectable) return "";
             const action = `Include ${data.componentLabel || ""} in chart`;
-            return `<input type="checkbox" class="plot-select" data-line="${data.line}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
+            const indeterminateFlag = data.plotIndeterminate ? "1" : "0";
+            return `<input type="checkbox" class="plot-select" data-line="${data.line}" data-indeterminate="${indeterminateFlag}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
           },
         },
         {
@@ -2348,6 +2392,22 @@
       return [...staticCols, ...dynamicCols];
     }
 
+    function applyPlotCheckboxIndeterminateStates() {
+      if (!state.tableHostEl) return;
+      const checkboxes = state.tableHostEl.querySelectorAll("input.plot-select[data-indeterminate]");
+      for (const cb of checkboxes) {
+        cb.indeterminate = cb.getAttribute("data-indeterminate") === "1";
+      }
+    }
+
+    function scheduleApplyPlotCheckboxIndeterminateStates() {
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => applyPlotCheckboxIndeterminateStates());
+      } else {
+        setTimeout(applyPlotCheckboxIndeterminateStates, 0);
+      }
+    }
+
     function renderTableWithTabulator(visibleRows, periodBuckets, metricKey, model, activeParentLine) {
       if (!state.tableHostEl) return;
       if (typeof Tabulator === "undefined") {
@@ -2376,8 +2436,14 @@
           },
         });
         state.tableColumnsSignature = signature;
+        scheduleApplyPlotCheckboxIndeterminateStates();
       } else {
-        state.tableInstance.replaceData(rows);
+        const replaceResult = state.tableInstance.replaceData(rows);
+        if (replaceResult && typeof replaceResult.then === "function") {
+          replaceResult.then(() => scheduleApplyPlotCheckboxIndeterminateStates());
+        } else {
+          scheduleApplyPlotCheckboxIndeterminateStates();
+        }
       }
     }
 
@@ -3117,7 +3183,10 @@
       if (!cb || !state.model) return;
       const line = Number(cb.getAttribute("data-line"));
       if (!Number.isFinite(line)) return;
-      setLineSelectedForPlot(line, cb.checked);
+      const targets = getPlotToggleTargets(state.model, line, { includeSelf: true });
+      for (const targetLine of targets) {
+        setLineSelectedForPlot(targetLine, cb.checked);
+      }
       state.chartSeriesCache = new Map();
       renderPivot();
     });
