@@ -1296,6 +1296,7 @@
         bucketCoreDeltaCache: new Map(),
         bucketMetricCache: new Map(),
         bucketResidualCache: new Map(),
+        contributionDisplayScaleCache: new Map(),
       };
     }
 
@@ -2099,6 +2100,43 @@
       return Number.isFinite(annualized) ? annualized : null;
     }
 
+    function getContributionDisplayScaleForBucket(model, bucket) {
+      if (!model || !bucket || !bucket.id) return null;
+      const activeParentLine = getActiveParentLine(model);
+      const n = Array.isArray(bucket.months) ? bucket.months.length : 0;
+      const key = `${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|n:${n}`;
+      if (model.contributionDisplayScaleCache.has(key)) return model.contributionDisplayScaleCache.get(key);
+
+      let scale = null;
+      if (n > 0) {
+        const totalRaw = computeBucketMetricValue("contrib_pp", activeParentLine, bucket, model);
+        const totalAnn = annualizePercentForBucket(totalRaw, n);
+        if (Number.isFinite(totalRaw) && Number.isFinite(totalAnn) && Math.abs(totalRaw) > 1e-10) {
+          scale = totalAnn / totalRaw;
+        } else {
+          // Locked fallback for unstable/invalid compounded scaling.
+          scale = 12 / n;
+        }
+      }
+      model.contributionDisplayScaleCache.set(key, scale);
+      return scale;
+    }
+
+    function getDisplayedContributionValueAdditive(model, rawValue, bucket) {
+      if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) return null;
+      const scale = getContributionDisplayScaleForBucket(model, bucket);
+      if (!Number.isFinite(scale)) return null;
+      const out = rawValue * scale;
+      return Number.isFinite(out) ? out : null;
+    }
+
+    function getDisplayedMetricValueForBucket(metricKey, rawValue, bucket, model = null) {
+      if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) return null;
+      if (metricKey === "contrib_pp") return getDisplayedContributionValueAdditive(model, rawValue, bucket);
+      const monthCount = bucket && Array.isArray(bucket.months) ? bucket.months.length : 0;
+      return getDisplayedMetricValue(metricKey, rawValue, monthCount);
+    }
+
     function getDisplayedMetricValue(metricKey, rawValue, bucketMonthCount) {
       if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) return null;
       if (metricKey === "contrib_pp") return annualizePercentForBucket(rawValue, bucketMonthCount);
@@ -2629,15 +2667,13 @@
       const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
       const bucketA = compareMode ? periodBuckets[0] : null;
       const bucketB = compareMode ? periodBuckets[1] : null;
-      const monthsA = bucketA && Array.isArray(bucketA.months) ? bucketA.months.length : 0;
-      const monthsB = bucketB && Array.isArray(bucketB.months) ? bucketB.months.length : 0;
       const plotStateCache = new Map();
       const applyCompareDelta = (baseRow) => {
         if (!compareMode) return;
         const rawA = baseRow[getBucketFieldKey(0)];
         const rawB = baseRow[getBucketFieldKey(1)];
-        const displayedA = getDisplayedMetricValue(metricKey, rawA, monthsA);
-        const displayedB = getDisplayedMetricValue(metricKey, rawB, monthsB);
+        const displayedA = getDisplayedMetricValueForBucket(metricKey, rawA, bucketA, model);
+        const displayedB = getDisplayedMetricValueForBucket(metricKey, rawB, bucketB, model);
         baseRow.compareDelta = (Number.isFinite(displayedA) && Number.isFinite(displayedB))
           ? (displayedB - displayedA)
           : null;
@@ -2744,7 +2780,7 @@
       return Math.max(78, Math.min(118, rawWidth));
     }
 
-    function buildTableColumnsForTabulator(periodBuckets, metricKey, mobilePortrait = false) {
+    function buildTableColumnsForTabulator(periodBuckets, metricKey, model, mobilePortrait = false) {
       const numericWidth = computeNumericColumnWidth(periodBuckets);
       const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
       const plotColWidth = mobilePortrait ? 50 : 62;
@@ -2829,8 +2865,7 @@
             formatter: (cell) => {
               const v = cell.getValue();
               if (v === null || v === undefined || Number.isNaN(v)) return "";
-              const monthCount = Array.isArray(bucketA && bucketA.months) ? bucketA.months.length : 0;
-              const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+              const displayed = getDisplayedMetricValueForBucket(metricKey, v, bucketA, model);
               return formatDisplayedMetricValue(metricKey, displayed);
             },
           },
@@ -2848,8 +2883,7 @@
             formatter: (cell) => {
               const v = cell.getValue();
               if (v === null || v === undefined || Number.isNaN(v)) return "";
-              const monthCount = Array.isArray(bucketB && bucketB.months) ? bucketB.months.length : 0;
-              const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+              const displayed = getDisplayedMetricValueForBucket(metricKey, v, bucketB, model);
               return formatDisplayedMetricValue(metricKey, displayed);
             },
           },
@@ -2882,8 +2916,7 @@
           formatter: (cell) => {
             const v = cell.getValue();
             if (v === null || v === undefined || Number.isNaN(v)) return "";
-            const monthCount = Array.isArray(bucket.months) ? bucket.months.length : 0;
-            const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+            const displayed = getDisplayedMetricValueForBucket(metricKey, v, bucket, model);
             return formatDisplayedMetricValue(metricKey, displayed);
           },
         }));
@@ -2927,7 +2960,7 @@
         }
         state.tableInstance = new Tabulator(state.tableHostEl, {
           data: rows,
-          columns: buildTableColumnsForTabulator(periodBuckets, metricKey, mobilePortrait),
+          columns: buildTableColumnsForTabulator(periodBuckets, metricKey, model, mobilePortrait),
           layout: "fitData",
           index: "rowKey",
           placeholder: "No data for current selection",
@@ -3003,16 +3036,14 @@
       return [...legendOrderedSeries].reverse();
     }
 
-    function buildStackedBarOption(buckets, series, metricKey) {
+    function buildStackedBarOption(buckets, series, metricKey, model) {
       const categories = buckets.map((b) => b.label);
       const rotate = categories.length > 12 ? 35 : 0;
       const displayedSeries = series.map((s) => ({
         ...s,
         displayedValues: s.values.map((v, idx) => {
-          const monthCount = Array.isArray(buckets[idx] && buckets[idx].months)
-            ? buckets[idx].months.length
-            : 0;
-          return getDisplayedMetricValue(metricKey, v, monthCount);
+          const bucket = buckets[idx] || null;
+          return getDisplayedMetricValueForBucket(metricKey, v, bucket, model);
         }),
       }));
 
@@ -3107,10 +3138,9 @@
       };
     }
 
-    function buildPeriodDivergingOption(bucket, series, metricKey) {
-      const monthCount = Array.isArray(bucket && bucket.months) ? bucket.months.length : 0;
+    function buildPeriodDivergingOption(bucket, series, metricKey, model) {
       const values = series
-        .map((s) => ({ ...s, v: getDisplayedMetricValue(metricKey, s.values[0], monthCount) }))
+        .map((s) => ({ ...s, v: getDisplayedMetricValueForBucket(metricKey, s.values[0], bucket, model) }))
         .filter((s) => Number.isFinite(s.v) && s.v !== 0);
       if (!values.length) return null;
       return {
@@ -3174,12 +3204,10 @@
       };
     }
 
-    function buildCompareDumbbellOption(series, metricKey, buckets) {
+    function buildCompareDumbbellOption(series, metricKey, buckets, model) {
       if (!Array.isArray(buckets) || buckets.length < 2) return null;
       const bucketA = buckets[0];
       const bucketB = buckets[1];
-      const monthCountA = Array.isArray(bucketA && bucketA.months) ? bucketA.months.length : 0;
-      const monthCountB = Array.isArray(bucketB && bucketB.months) ? bucketB.months.length : 0;
       const labelA = `A (${String(bucketA && bucketA.startYM ? bucketA.startYM : "A")} to ${String(bucketA && bucketA.endYM ? bucketA.endYM : "")})`;
       const labelB = `B (${String(bucketB && bucketB.startYM ? bucketB.startYM : "B")} to ${String(bucketB && bucketB.endYM ? bucketB.endYM : "")})`;
 
@@ -3187,8 +3215,8 @@
       for (const s of series) {
         const rawA = Array.isArray(s.values) ? s.values[0] : null;
         const rawB = Array.isArray(s.values) ? s.values[1] : null;
-        const valueA = getDisplayedMetricValue(metricKey, rawA, monthCountA);
-        const valueB = getDisplayedMetricValue(metricKey, rawB, monthCountB);
+        const valueA = getDisplayedMetricValueForBucket(metricKey, rawA, bucketA, model);
+        const valueB = getDisplayedMetricValueForBucket(metricKey, rawB, bucketB, model);
         if (!Number.isFinite(valueA) && !Number.isFinite(valueB)) continue;
         rows.push({
           id: s.id,
@@ -3327,7 +3355,7 @@
       };
     }
 
-    function renderChartWithECharts({ buckets, series, metricKey, columnMode, stackOrderSignature = "" }) {
+    function renderChartWithECharts({ buckets, series, metricKey, columnMode, model, stackOrderSignature = "" }) {
       const compareMode = columnMode === "compare";
       const legendSeries = series;
       const plotSeries = getSeriesForStackDrawing(legendSeries, metricKey, columnMode);
@@ -3346,12 +3374,12 @@
 
       let option = null;
       if (compareMode) {
-        option = buildCompareDumbbellOption(legendSeries, metricKey, buckets);
+        option = buildCompareDumbbellOption(legendSeries, metricKey, buckets, model);
       } else if (columnMode === "period" && buckets.length === 1) {
-        if (metricKey === "weight_pct") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
-        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
+        if (metricKey === "weight_pct") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey, model);
+        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey, model);
       } else {
-        option = buildStackedBarOption(buckets, plotSeries, metricKey);
+        option = buildStackedBarOption(buckets, plotSeries, metricKey, model);
       }
 
       if (!option) {
@@ -3509,6 +3537,7 @@
         series: chartSeries,
         metricKey,
         columnMode,
+        model,
         stackOrderSignature,
       });
     }
