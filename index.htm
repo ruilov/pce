@@ -1989,9 +1989,12 @@
     }
 
     function getChartExpandedSet(model, expandedSet, metricKey) {
-      const out = new Set(expandedSet || []);
-      // Keep selected-parent decomposition active even if user collapses the row.
-      out.add(getActiveParentLine(model));
+      const out = new Set();
+      for (const line of (expandedSet || [])) {
+        if (!model.metaByLine.has(line)) continue;
+        if (isExcludedInCore(line, model)) continue;
+        out.add(line);
+      }
       return out;
     }
 
