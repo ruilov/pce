@@ -2082,6 +2082,55 @@
       return out;
     }
 
+    function computePlotSplitForLine(model, line, metricKey, bucket, plotStateCache, splitMemo, selectionSig = "") {
+      const activeParentLine = getActiveParentLine(model);
+      const memoKey = `${line}|${bucket.id}|${metricKey}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}`;
+      if (splitMemo.has(memoKey)) return splitMemo.get(memoKey);
+
+      const total = computeBucketMetricValue(metricKey, line, bucket, model);
+      const selectionState = getPlotSelectionStateForLine(model, line, plotStateCache);
+
+      if (selectionState === "checked") {
+        const out = { selected: total, deselected: null };
+        splitMemo.set(memoKey, out);
+        return out;
+      }
+      if (selectionState === "unchecked") {
+        const out = { selected: null, deselected: total };
+        splitMemo.set(memoKey, out);
+        return out;
+      }
+
+      const children = getIncludedChildren(model, line);
+      if (!children.length) {
+        const out = isLineSelectedForPlot(line)
+          ? { selected: total, deselected: null }
+          : { selected: null, deselected: total };
+        splitMemo.set(memoKey, out);
+        return out;
+      }
+
+      const childSelected = [];
+      const childDeselected = [];
+      for (const child of children) {
+        const childSplit = computePlotSplitForLine(model, child, metricKey, bucket, plotStateCache, splitMemo, selectionSig);
+        childSelected.push(childSplit.selected);
+        childDeselected.push(childSplit.deselected);
+      }
+
+      const deselected = sumNonNull(childDeselected);
+      let selected = null;
+      if (total !== null) {
+        selected = deselected === null ? total : (total - deselected);
+      } else {
+        selected = sumNonNull(childSelected);
+      }
+
+      const out = { selected, deselected };
+      splitMemo.set(memoKey, out);
+      return out;
+    }
+
     function buildChartSeries(model, metricKey, periodBuckets, expandedSet) {
       const effectiveExpandedSet = getChartExpandedSet(model, expandedSet, metricKey);
       const activeParentLine = getActiveParentLine(model);
@@ -2093,29 +2142,30 @@
 
       const series = [];
       const frontierLines = buildRootFrontierLines(model, effectiveExpandedSet);
-      const uncheckedSums = new Array(periodBuckets.length).fill(0);
-      const uncheckedHas = new Array(periodBuckets.length).fill(false);
+      const plotStateCache = new Map();
+      const splitMemo = new Map();
+      const deselectedSums = new Array(periodBuckets.length).fill(0);
+      const deselectedHas = new Array(periodBuckets.length).fill(false);
       for (const line of frontierLines) {
         const meta = model.metaByLine.get(line);
         if (!meta) continue;
-        const values = periodBuckets.map((bucket) => computeBucketMetricValue(metricKey, line, bucket, model));
-        if (!values.some((v) => v !== null)) continue;
-
-        const shouldPlotLine = isLineSelectedForPlot(line);
-        if (shouldPlotLine) {
-          series.push({
-            id: `line:${line}`,
-            label: meta.desc,
-            values,
-          });
-        } else {
-          for (let i = 0; i < values.length; i++) {
-            const v = values[i];
-            if (v === null || v === undefined || Number.isNaN(v)) continue;
-            uncheckedHas[i] = true;
-            uncheckedSums[i] += v;
-          }
+        const values = [];
+        for (let i = 0; i < periodBuckets.length; i++) {
+          const bucket = periodBuckets[i];
+          const split = computePlotSplitForLine(model, line, metricKey, bucket, plotStateCache, splitMemo, selectionSig);
+          values.push(split.selected);
+          const d = split.deselected;
+          if (d === null || d === undefined || Number.isNaN(d)) continue;
+          deselectedHas[i] = true;
+          deselectedSums[i] += d;
         }
+
+        if (!values.some((v) => v !== null)) continue;
+        series.push({
+          id: `line:${line}`,
+          label: meta.desc,
+          values,
+        });
       }
 
       const openResidualSums = new Array(periodBuckets.length).fill(0);
@@ -2137,9 +2187,9 @@
       const residualValues = periodBuckets.map((_, i) => {
         let sum = 0;
         let hasAny = false;
-        if (uncheckedHas[i]) {
+        if (deselectedHas[i]) {
           hasAny = true;
-          sum += uncheckedSums[i];
+          sum += deselectedSums[i];
         }
         if (metricKey === "contrib_pp" && openResidualHas[i]) {
           hasAny = true;
