@@ -1,0 +1,2743 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PCE Inflation Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/css/tabulator.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg-0: #0a0f1a;
+      --bg-1: #111827;
+      --bg-2: #172235;
+      --bg-3: #1f2d43;
+      --border: #2a3a54;
+      --border-strong: #385074;
+      --text-1: #d8e3f3;
+      --text-2: #a5b3c8;
+      --text-3: #7e8da6;
+      --accent: #5ea1ff;
+      --accent-2: #8dc8ff;
+      --success: #52c98b;
+      --danger: #f26e7a;
+      --table-header-bg: #1b314f;
+      --table-header-border: #2f4a6a;
+      --table-row-hover: rgba(93, 163, 255, 0.12);
+      --shadow: 0 12px 24px rgba(0, 0, 0, 0.26);
+      --radius: 10px;
+      --mono: "JetBrains Mono", "Consolas", "Menlo", monospace;
+      --sans: "Inter", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px 18px 26px;
+      font-family: var(--sans);
+      color: var(--text-1);
+      background:
+        radial-gradient(1200px 520px at -6% -14%, rgba(85, 144, 255, 0.26), transparent 60%),
+        radial-gradient(950px 420px at 108% -12%, rgba(41, 201, 167, 0.16), transparent 58%),
+        linear-gradient(160deg, #070b13 0%, var(--bg-0) 48%, #0d1524 100%);
+      min-height: 100vh;
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.25px;
+      color: #eef5ff;
+    }
+    .row {
+      position: sticky;
+      top: 10px;
+      z-index: 20;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(24, 37, 57, 0.96), rgba(17, 26, 41, 0.94));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.18px;
+      text-transform: uppercase;
+    }
+    input, button, select {
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #16253a, #132034);
+      color: var(--text-1);
+      font-family: var(--sans);
+      font-size: 13px;
+      padding: 7px 10px;
+      transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    }
+    select {
+      min-height: 34px;
+      font-weight: 500;
+    }
+    select option,
+    select optgroup {
+      color: #102038;
+      background: #f3f7ff;
+      font-weight: 500;
+    }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: 0.15px;
+    }
+    button:hover:not(:disabled), select:hover, input:hover {
+      border-color: var(--border-strong);
+      background: linear-gradient(180deg, #1a2b44, #16263d);
+    }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(94, 161, 255, 0.2);
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+    #out {
+      margin-top: 10px;
+      display: grid;
+      gap: 12px;
+    }
+    .quant-panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(24, 36, 56, 0.9), rgba(16, 25, 40, 0.92));
+      box-shadow: var(--shadow);
+    }
+    .quant-table-panel { overflow: hidden; }
+    .quant-chart-panel { padding: 12px; }
+    .tabulator {
+      border: none;
+      background: transparent;
+      color: var(--text-1);
+      font-size: 12px;
+      font-family: var(--sans);
+    }
+    .tabulator .tabulator-header {
+      background: var(--table-header-bg) !important;
+      border-bottom: 1px solid var(--table-header-border) !important;
+    }
+    .tabulator .tabulator-header .tabulator-col {
+      background: var(--table-header-bg) !important;
+      border-right: 1px solid var(--table-header-border) !important;
+      color: var(--text-2);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      min-height: 38px;
+    }
+    .tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover,
+    .tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="asc"],
+    .tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="desc"] {
+      background: #224064 !important;
+    }
+    .tabulator .tabulator-col:last-child { border-right: none; }
+    .tabulator .tabulator-tableholder .tabulator-table { background: transparent; }
+    .tabulator-row {
+      background: transparent;
+      border-bottom: 1px solid rgba(45, 64, 91, 0.45);
+    }
+    .tabulator-row:nth-child(2n) { background: rgba(255, 255, 255, 0.01); }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover {
+      background: var(--table-row-hover) !important;
+    }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover {
+      background: rgba(93, 163, 255, 0.18) !important;
+    }
+    .tabulator-cell {
+      border-right: 1px solid rgba(45, 64, 91, 0.45);
+      padding: 6px 8px;
+    }
+    .tabulator-cell:last-child { border-right: none; }
+    .tabulator-cell.quant-cell-number {
+      font-family: var(--mono);
+      color: #dbe7fa;
+      font-size: 12px;
+    }
+    .quant-node-label {
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 20px;
+      color: #e6eefc;
+    }
+    .quant-row-secondary .quant-node-label { color: var(--text-2); }
+    .tree-toggle {
+      width: 22px;
+      height: 22px;
+      line-height: 20px;
+      text-align: center;
+      padding: 0;
+      font-family: var(--mono);
+      font-size: 11px;
+      border-radius: 6px;
+    }
+    .tree-spacer { display: inline-block; width: 22px; }
+    .set-parent-btn {
+      padding: 2px 8px;
+      font-size: 11px;
+      line-height: 1.4;
+      border-radius: 999px;
+    }
+    .plot-select {
+      margin: 0;
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .chart-empty {
+      color: var(--text-3);
+      font-size: 13px;
+      padding: 10px 2px;
+    }
+    .chart-body { display: flex; gap: 14px; align-items: stretch; min-height: 420px; }
+    .chart-main {
+      flex: 1 1 auto;
+      min-width: 0;
+      border: 1px solid rgba(58, 81, 116, 0.52);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(15, 23, 37, 0.64), rgba(12, 20, 33, 0.68));
+      padding: 8px;
+    }
+    .chart-host { width: 100%; height: 380px; }
+    .chart-legend-panel {
+      flex: 0 0 260px;
+      width: 260px;
+      border: 1px solid rgba(58, 81, 116, 0.52);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(15, 23, 37, 0.64), rgba(12, 20, 33, 0.68));
+      padding: 8px;
+    }
+    .chart-legend-title {
+      margin: 0 0 8px 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.22px;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+    .chart-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: stretch;
+      max-height: 338px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+    .chart-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 4px 6px;
+      color: var(--text-1);
+      background: rgba(14, 22, 35, 0.5);
+    }
+    .chart-legend-item:hover {
+      border-color: var(--border-strong);
+      background: rgba(22, 33, 49, 0.8);
+    }
+    .chart-legend-swatch { width: 10px; height: 10px; border: 1px solid rgba(226, 236, 252, 0.52); border-radius: 2px; }
+    .chart-legend-draggable { cursor: grab; user-select: none; }
+    .chart-legend-draggable.dragging { opacity: 0.5; cursor: grabbing; }
+    .chart-legend-draggable.drag-over-before { border-top-color: var(--accent); }
+    .chart-legend-draggable.drag-over-after { border-bottom-color: var(--accent); }
+    .muted { color: var(--text-3); font-size: 12px; }
+    .error { color: var(--danger); white-space: pre-wrap; }
+    code {
+      background: #1b2b42;
+      border: 1px solid var(--border);
+      color: #d8e8ff;
+      padding: 2px 5px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    @media (max-width: 1100px) {
+      .chart-body { flex-direction: column; min-height: 0; }
+      .chart-legend-panel {
+        width: 100%;
+        flex-basis: auto;
+      }
+      .chart-legend { max-height: 220px; }
+    }
+    @media (max-width: 760px) {
+      body { padding: 12px; }
+      .row {
+        position: static;
+        padding: 10px;
+      }
+      label { width: 100%; justify-content: space-between; }
+    }
+  </style>
+</head>
+<body>
+  <h1>PCE Inflation Explorer</h1>
+
+  <div class="row">
+    <label>Start (MM/YYYY):
+      <select id="startMonth"></select>
+      <select id="startYear"></select>
+    </label>
+    <label>End (MM/YYYY):
+      <select id="endMonth"></select>
+      <select id="endYear"></select>
+    </label>
+    <label>Metric:
+      <select id="metric">
+        <option value="contrib_pp">Contribution to PCE (pp)</option>
+        <option value="weight_pct">Weight in parent (%)</option>
+      </select>
+    </label>
+    <label>Grouping:
+      <select id="columns">
+        <option value="month">Month</option>
+        <option value="quarter">Quarter</option>
+        <option value="year">Year</option>
+        <option value="period">Entire period</option>
+      </select>
+    </label>
+    <label>Mode:
+      <select id="coreMode">
+        <option value="headline">Headline</option>
+        <option value="core">Core</option>
+      </select>
+    </label>
+    <button id="resetParent" disabled>Reset to PCE</button>
+  </div>
+
+  <div id="out"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/js/tabulator.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script>
+    const DATA_LOAD_CONFIG = {
+      // Keep these relative for same-origin loading via local HTTP server.
+      PRICE_CSV_PATH: "./NIUnderlyingDetail_U20404_freq-M_year-ALL.csv",
+      NOMINAL_CSV_PATH: "./NIUnderlyingDetail_U20405_freq-M_year-ALL.csv",
+      HIERARCHY_CSV_PATH: "./NIUnderlyingDetail_hierarchy.csv",
+      ROOT_LINE_NUMBER: 1,
+      ENABLE_IN_MEMORY_CACHE: false,
+      // When memory cache is off, force fresh network fetches.
+      FETCH_CACHE_MODE_WHEN_OFF: "no-store",
+    };
+
+    const METRICS = {
+      contrib_pp: { label: "Contribution to PCE (pp)" },
+      weight_pct: { label: "Weight in parent (%)" },
+    };
+    const COLUMN_MODES = {
+      month: { label: "Month" },
+      quarter: { label: "Quarter" },
+      year: { label: "Year" },
+      period: { label: "Entire period" },
+    };
+    const DEFAULT_COLUMN_MODE = "quarter";
+    const MIN_SELECTABLE_YEAR = 1950;
+    const MAX_SELECTABLE_YEAR = new Date().getFullYear() + 1;
+    const CHART_SVG_HEIGHT = 380;
+    const DISTINCT_BASE_COLORS = [
+      "#0072B2", "#E69F00", "#009E73", "#D55E00",
+      "#CC79A7", "#56B4E9", "#F0E442", "#332288",
+      "#88CCEE", "#44AA99", "#117733", "#999933",
+      "#DDCC77", "#CC6677", "#882255", "#AA4499",
+    ];
+
+    const outEl = document.getElementById("out");
+    const startMonthEl = document.getElementById("startMonth");
+    const startYearEl = document.getElementById("startYear");
+    const endMonthEl = document.getElementById("endMonth");
+    const endYearEl = document.getElementById("endYear");
+    const metricEl = document.getElementById("metric");
+    const columnsEl = document.getElementById("columns");
+    const coreModeEl = document.getElementById("coreMode");
+    const resetParentBtn = document.getElementById("resetParent");
+
+    const csvRowsCache = new Map();
+    const state = {
+      model: null,
+      columnMode: DEFAULT_COLUMN_MODE,
+      months: [],
+      periodBuckets: [],
+      expanded: new Set(),
+      chartSeriesCache: new Map(),
+      plotSelectedByLine: new Map(),
+      plotStackOrderTopToBottom: [],
+      plotStackOrderVersion: 0,
+      activeParentLine: null,
+      coreMode: "headline",
+      coreExclusionRoots: [],
+      coreExcludedLines: new Set(),
+      coreIdentityStatus: "failed",
+      coreOfficialComparatorByLine: new Map(),
+      coreDeltaEligibleAncestors: new Set(),
+      defaultsInitializedFromData: false,
+      seriesColorById: new Map(),
+      tableInstance: null,
+      tableColumnsSignature: "",
+      chartInstance: null,
+      tableHostEl: null,
+      chartHostEl: null,
+      legendHostEl: null,
+      chartWrapEl: null,
+      chartResizeBound: false,
+      dragSeriesId: null,
+      dragOverSeriesId: null,
+      dragOverPlacement: null,
+    };
+
+    function setStatus(s) {
+      if (!String(s || "").trim()) return;
+      console.info(`[status] ${s}`);
+    }
+    function setError(e) {
+      if (!e) return;
+      console.error(e);
+    }
+
+    function ymToTimePeriod(ym) { // "YYYY-MM" -> "YYYYMmm"
+      const [y, m] = ym.split("-");
+      return `${y}M${m}`;
+    }
+
+    function populateMonthOptions(selectEl) {
+      selectEl.innerHTML = "";
+      for (let m = 1; m <= 12; m++) {
+        const v = String(m).padStart(2, "0");
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        selectEl.appendChild(opt);
+      }
+    }
+
+    function populateYearOptions(selectEl, minYear, maxYear) {
+      selectEl.innerHTML = "";
+      for (let y = maxYear; y >= minYear; y--) {
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        selectEl.appendChild(opt);
+      }
+    }
+
+    function composeYmFromSelectors(monthEl, yearEl) {
+      const month = String(monthEl.value || "").trim();
+      const year = String(yearEl.value || "").trim();
+      if (!/^\d{2}$/.test(month) || !/^\d{4}$/.test(year)) return "";
+      return `${year}-${month}`;
+    }
+
+    function setSelectorsFromYm(monthEl, yearEl, ym) {
+      const m = /^(\d{4})-(\d{2})$/.exec(String(ym || "").trim());
+      if (!m) return;
+      const year = m[1];
+      const month = m[2];
+
+      if ([...yearEl.options].some((o) => o.value === year)) yearEl.value = year;
+      if ([...monthEl.options].some((o) => o.value === month)) monthEl.value = month;
+    }
+
+    function getSelectedYmRange() {
+      const startYM = composeYmFromSelectors(startMonthEl, startYearEl);
+      const endYM = composeYmFromSelectors(endMonthEl, endYearEl);
+      return {
+        startYM,
+        endYM,
+        valid: Boolean(startYM && endYM && startYM <= endYM),
+      };
+    }
+
+    function timePeriodToYm(tp) { // "YYYYMmm" -> "YYYY-MM"
+      const y = tp.slice(0, 4);
+      const m = tp.slice(5, 7);
+      return `${y}-${m}`;
+    }
+
+    function defaultRangeLastMonths(monthsBack = 36) {
+      const now = new Date();
+      const endY = now.getFullYear();
+      const endM = String(now.getMonth() + 1).padStart(2, "0");
+      const end = `${endY}-${endM}`;
+
+      const startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+      const startY = startDate.getFullYear();
+      const startM = String(startDate.getMonth() + 1).padStart(2, "0");
+      const start = `${startY}-${startM}`;
+
+      return { start, end };
+    }
+
+    function subtractMonthsFromYm(ym, monthsToSubtract) {
+      const m = /^(\d{4})-(\d{2})$/.exec(String(ym || "").trim());
+      if (!m) return "";
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return "";
+      const d = new Date(year, month - 1 - Number(monthsToSubtract || 0), 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function parseBeaNumber(x) {
+      if (x === null || x === undefined) return null;
+      const s = String(x).trim();
+      if (!s) return null;
+      const cleaned = s.replace(/,/g, "");
+      const v = Number(cleaned);
+      return Number.isFinite(v) ? v : null;
+    }
+
+    function parseLineNumber(x) {
+      const v = parseBeaNumber(x);
+      if (v === null) return null;
+      const n = Math.trunc(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function parseTimePeriod(tp) {
+      const m = /^(\d{4})M(\d{2})$/.exec(String(tp || "").trim());
+      if (!m) return null;
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      if (!Number.isInteger(y) || !Number.isInteger(mo) || mo < 1 || mo > 12) return null;
+      return { y, mo };
+    }
+
+    function findLatestRootMonthWithData(model) {
+      if (!model) return "";
+      const rootMeta = model.metaByLine.get(model.rootLine);
+      if (!rootMeta) return "";
+      const rootNominalCode = String(rootMeta.nominalSeriesCode || "").trim();
+      const rootPriceCode = String(rootMeta.priceSeriesCode || "").trim();
+      if (!rootNominalCode || !rootPriceCode) return "";
+
+      const nominalByTp = model.nominalBySeries.get(rootNominalCode);
+      const priceByTp = model.priceBySeries.get(rootPriceCode);
+      if (!nominalByTp || !priceByTp) return "";
+
+      let latestTp = "";
+      for (const [tp, nominalVal] of nominalByTp.entries()) {
+        if (nominalVal === null || nominalVal === undefined || Number.isNaN(nominalVal)) continue;
+        const priceVal = priceByTp.get(tp);
+        if (priceVal === null || priceVal === undefined || Number.isNaN(priceVal)) continue;
+        if (!parseTimePeriod(tp)) continue;
+        if (!latestTp || tp > latestTp) latestTp = tp;
+      }
+      return latestTp ? timePeriodToYm(latestTp) : "";
+    }
+
+    function computeDefaultYmRangeFromModel(model, yearsBack = 5) {
+      const endYM = findLatestRootMonthWithData(model);
+      if (!endYM) return null;
+      const startYM = subtractMonthsFromYm(endYM, yearsBack * 12);
+      if (!startYM) return null;
+      return { startYM, endYM };
+    }
+
+    function makeTimePeriod(y, mo) {
+      return `${String(y).padStart(4, "0")}M${String(mo).padStart(2, "0")}`;
+    }
+
+    function prevTimePeriod(tp) {
+      const p = parseTimePeriod(tp);
+      if (!p) return null;
+      let { y, mo } = p;
+      mo -= 1;
+      if (mo === 0) {
+        y -= 1;
+        mo = 12;
+      }
+      return makeTimePeriod(y, mo);
+    }
+
+    function buildMonthRange(startTP, endTP) {
+      const s = parseTimePeriod(startTP);
+      const e = parseTimePeriod(endTP);
+      if (!s || !e) return [];
+      if (s.y > e.y || (s.y === e.y && s.mo > e.mo)) return [];
+
+      const out = [];
+      let y = s.y;
+      let mo = s.mo;
+      while (y < e.y || (y === e.y && mo <= e.mo)) {
+        out.push(makeTimePeriod(y, mo));
+        mo += 1;
+        if (mo === 13) {
+          mo = 1;
+          y += 1;
+        }
+      }
+      return out;
+    }
+
+    function getQuarterFromMonth(month) {
+      if (month <= 3) return 1;
+      if (month <= 6) return 2;
+      if (month <= 9) return 3;
+      return 4;
+    }
+
+    function buildPeriodBuckets(months, mode, startYM, endYM) {
+      if (!months.length) return [];
+
+      if (!COLUMN_MODES[mode]) mode = DEFAULT_COLUMN_MODE;
+      if (mode === "month") {
+        return months.map((tp) => ({
+          id: `month:${tp}`,
+          label: timePeriodToYm(tp),
+          months: [tp],
+        }));
+      }
+      if (mode === "period") {
+        return [{
+          id: `period:${months[0]}:${months[months.length - 1]}`,
+          label: `${startYM} to ${endYM}`,
+          months: [...months],
+        }];
+      }
+
+      const order = [];
+      const byKey = new Map();
+      for (const tp of months) {
+        const parsed = parseTimePeriod(tp);
+        if (!parsed) continue;
+        const key = mode === "quarter"
+          ? `${parsed.y}-Q${getQuarterFromMonth(parsed.mo)}`
+          : `${parsed.y}`;
+
+        if (!byKey.has(key)) {
+          byKey.set(key, []);
+          order.push(key);
+        }
+        byKey.get(key).push(tp);
+      }
+
+      return order.map((key) => {
+        const bucketMonths = byKey.get(key) || [];
+        const first = bucketMonths[0] || "";
+        const last = bucketMonths[bucketMonths.length - 1] || "";
+        return {
+          id: `${mode}:${key}:${first}:${last}`,
+          label: key,
+          months: bucketMonths,
+        };
+      });
+    }
+
+    // Minimal CSV parser that handles quoted fields and commas inside quotes.
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let field = "";
+      let i = 0;
+      let inQuotes = false;
+
+      function endField() {
+        row.push(field);
+        field = "";
+      }
+      function endRow() {
+        rows.push(row);
+        row = [];
+      }
+
+      while (i < text.length) {
+        const c = text[i];
+
+        if (inQuotes) {
+          if (c === '"') {
+            const next = text[i + 1];
+            if (next === '"') { // escaped quote
+              field += '"';
+              i += 2;
+              continue;
+            } else {
+              inQuotes = false;
+              i += 1;
+              continue;
+            }
+          } else {
+            field += c;
+            i += 1;
+            continue;
+          }
+        } else {
+          if (c === '"') {
+            inQuotes = true;
+            i += 1;
+            continue;
+          }
+          if (c === ",") {
+            endField();
+            i += 1;
+            continue;
+          }
+          if (c === "\r") {
+            i += 1;
+            continue;
+          }
+          if (c === "\n") {
+            endField();
+            endRow();
+            i += 1;
+            continue;
+          }
+          field += c;
+          i += 1;
+        }
+      }
+
+      endField();
+      if (row.length > 1 || row[0] !== "") endRow();
+
+      if (!rows.length) return [];
+      const header = rows[0];
+      const out = [];
+      for (let r = 1; r < rows.length; r++) {
+        const obj = {};
+        const line = rows[r];
+        for (let c = 0; c < header.length; c++) {
+          obj[header[c]] = line[c] ?? "";
+        }
+        out.push(obj);
+      }
+      return out;
+    }
+
+    function toAbsoluteUrl(path) {
+      return new URL(path, window.location.href).href;
+    }
+
+    async function fetchCsvText(url, options = {}) {
+      const fetchOptions = {};
+      if (options.fetchCacheMode) fetchOptions.cache = options.fetchCacheMode;
+
+      let resp;
+      try {
+        resp = await fetch(url, fetchOptions);
+      } catch (err) {
+        throw new Error(`Failed to fetch ${url}: ${err && err.message ? err.message : err}`);
+      }
+
+      if (!resp.ok) {
+        throw new Error(`Failed to load ${resp.url || url} (HTTP ${resp.status})`);
+      }
+      return resp.text();
+    }
+
+    async function loadCsv(url, { useMemoryCache = false, fetchCacheMode = undefined } = {}) {
+      if (useMemoryCache && csvRowsCache.has(url)) {
+        return csvRowsCache.get(url);
+      }
+
+      const text = await fetchCsvText(url, { fetchCacheMode });
+      const rows = parseCsv(text);
+      if (useMemoryCache) csvRowsCache.set(url, rows);
+      return rows;
+    }
+
+    function buildHierarchyModel(hierarchyRows) {
+      const allMeta = new Map();
+      for (const r of hierarchyRows) {
+        const line = parseLineNumber(r.LineNumber);
+        if (line === null) continue;
+        const nominalSeriesCode = String(r.SeriesCode || "").trim();
+        allMeta.set(line, {
+          line,
+          parent: parseLineNumber(r.ParentLineNumber),
+          tier: parseLineNumber(r.Tier),
+          path: String(r.Path || "").trim(),
+          desc: String(r.LineDescription || `Line ${line}`).trim(),
+          nominalSeriesCode,
+          priceSeriesCode: null,
+        });
+      }
+
+      let rootLine = DATA_LOAD_CONFIG.ROOT_LINE_NUMBER;
+      if (!allMeta.has(rootLine)) {
+        const fallbackRoot = [...allMeta.values()].find(
+          (m) => m.parent === null && /personal consumption expenditures/i.test(m.desc)
+        );
+        rootLine = fallbackRoot ? fallbackRoot.line : null;
+      }
+      if (rootLine === null || !allMeta.has(rootLine)) {
+        throw new Error(`Root line ${DATA_LOAD_CONFIG.ROOT_LINE_NUMBER} not found in hierarchy data.`);
+      }
+
+      const rootPrefix = `${rootLine}`;
+      const included = new Set([rootLine]);
+      for (const m of allMeta.values()) {
+        if (m.line === rootLine) continue;
+        if (m.path === rootPrefix || m.path.startsWith(`${rootPrefix}.`)) {
+          included.add(m.line);
+        }
+      }
+
+      if (included.size === 1) {
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const m of allMeta.values()) {
+            if (m.parent !== null && included.has(m.parent) && !included.has(m.line)) {
+              included.add(m.line);
+              changed = true;
+            }
+          }
+        }
+      }
+
+      const metaByLine = new Map();
+      for (const line of included) metaByLine.set(line, allMeta.get(line));
+
+      const childrenByParent = new Map();
+      for (const m of metaByLine.values()) {
+        if (m.parent === null || !metaByLine.has(m.parent)) continue;
+        if (!childrenByParent.has(m.parent)) childrenByParent.set(m.parent, []);
+        childrenByParent.get(m.parent).push(m.line);
+      }
+      for (const arr of childrenByParent.values()) arr.sort((a, b) => a - b);
+
+      return {
+        rootLine,
+        metaByLine,
+        childrenByParent,
+        priceBySeries: new Map(),
+        nominalBySeries: new Map(),
+        unresolvedPriceSeriesLines: [],
+        dlnCache: new Map(),
+        avgWeightCache: new Map(),
+        currentWeightCache: new Map(),
+        coreAdjustedNominalCache: new Map(),
+        reconstructedCoreContributionCache: new Map(),
+        officialComparableContributionCache: new Map(),
+        coreDeltaContributionCache: new Map(),
+        bucketCoreDeltaCache: new Map(),
+        bucketMetricCache: new Map(),
+        bucketResidualCache: new Map(),
+      };
+    }
+
+    function buildSeriesByCode(rows) {
+      const out = new Map();
+      for (const r of rows) {
+        const seriesCode = String(r.SeriesCode || "").trim();
+        if (!seriesCode) continue;
+        const tp = String(r.TimePeriod || "").trim();
+        if (!tp) continue;
+        const v = parseBeaNumber(r.DataValue);
+        if (v === null) continue;
+
+        let byTp = out.get(seriesCode);
+        if (!byTp) {
+          byTp = new Map();
+          out.set(seriesCode, byTp);
+        }
+        if (!byTp.has(tp)) byTp.set(tp, v);
+      }
+      return out;
+    }
+
+    function resolvePriceSeriesCode(nominalSeriesCode, priceBySeries) {
+      const nominal = String(nominalSeriesCode || "").trim();
+      if (!nominal) return null;
+
+      const mapped = nominal.endsWith("RC") ? `${nominal.slice(0, -2)}RG` : nominal;
+      if (priceBySeries.has(mapped)) return mapped;
+      if (priceBySeries.has(nominal)) return nominal;
+      return null;
+    }
+
+    function resolveNodeSeriesCodes(model) {
+      const unresolved = [];
+      for (const meta of model.metaByLine.values()) {
+        meta.priceSeriesCode = resolvePriceSeriesCode(meta.nominalSeriesCode, model.priceBySeries);
+        if (!meta.priceSeriesCode) unresolved.push(meta.line);
+      }
+      model.unresolvedPriceSeriesLines = unresolved;
+    }
+
+    function getSeriesValueByCode(seriesByCode, seriesCode, tp) {
+      if (!seriesCode) return null;
+      const byTp = seriesByCode.get(seriesCode);
+      if (!byTp) return null;
+      return byTp.has(tp) ? byTp.get(tp) : null;
+    }
+
+    function getDln(model, line, tp) {
+      const key = `${line}|${tp}`;
+      if (model.dlnCache.has(key)) return model.dlnCache.get(key);
+
+      const prevTp = prevTimePeriod(tp);
+      if (!prevTp) {
+        model.dlnCache.set(key, null);
+        return null;
+      }
+
+      const meta = model.metaByLine.get(line);
+      const priceSeriesCode = meta ? meta.priceSeriesCode : null;
+      const p = getSeriesValueByCode(model.priceBySeries, priceSeriesCode, tp);
+      const pPrev = getSeriesValueByCode(model.priceBySeries, priceSeriesCode, prevTp);
+      const out = (p !== null && pPrev !== null && p > 0 && pPrev > 0) ? Math.log(p) - Math.log(pPrev) : null;
+      model.dlnCache.set(key, out);
+      return out;
+    }
+
+    function getCurrentWeight(model, line, parentLine, tp) {
+      const key = `${line}|${parentLine}|${tp}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.currentWeightCache.has(key)) return model.currentWeightCache.get(key);
+
+      const childNom = isCoreEnabled()
+        ? getCoreAdjustedNominal(model, line, tp)
+        : getNominalLevelValue(model, line, tp);
+      const parentNom = isCoreEnabled()
+        ? getCoreAdjustedNominal(model, parentLine, tp)
+        : getNominalLevelValue(model, parentLine, tp);
+      const out = (childNom !== null && parentNom !== null && parentNom > 0) ? (childNom / parentNom) : null;
+      model.currentWeightCache.set(key, out);
+      return out;
+    }
+
+    function getAverageWeight(model, line, parentLine, tp) {
+      const key = `${line}|${parentLine}|${tp}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.avgWeightCache.has(key)) return model.avgWeightCache.get(key);
+
+      const prevTp = prevTimePeriod(tp);
+      if (!prevTp) {
+        model.avgWeightCache.set(key, null);
+        return null;
+      }
+
+      const w = getCurrentWeight(model, line, parentLine, tp);
+      const wPrev = getCurrentWeight(model, line, parentLine, prevTp);
+      const out = (w !== null && wPrev !== null) ? (0.5 * (w + wPrev)) : null;
+      model.avgWeightCache.set(key, out);
+      return out;
+    }
+
+    function isCoreEnabled() {
+      return state.coreMode === "core";
+    }
+
+    function getNominalLevelValue(model, line, tp) {
+      const meta = model.metaByLine.get(line);
+      return getSeriesValueByCode(model.nominalBySeries, meta ? meta.nominalSeriesCode : null, tp);
+    }
+
+    function getActiveParentLine(model) {
+      const line = Number(state.activeParentLine);
+      if (Number.isFinite(line) && model.metaByLine.has(line)) return line;
+      return model.rootLine;
+    }
+
+    function isDescendantOrSelf(model, line, ancestorLine) {
+      if (line === ancestorLine) return true;
+      const seen = new Set();
+      let cur = line;
+      while (model.metaByLine.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        const meta = model.metaByLine.get(cur);
+        if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) break;
+        cur = meta.parent;
+        if (cur === ancestorLine) return true;
+      }
+      return false;
+    }
+
+    function collectDescendantLines(model, rootLine, out) {
+      if (!model.metaByLine.has(rootLine) || out.has(rootLine)) return;
+      out.add(rootLine);
+      const children = model.childrenByParent.get(rootLine) || [];
+      for (const child of children) collectDescendantLines(model, child, out);
+    }
+
+    function normalizeCoreRoots(model, roots) {
+      const unique = [...new Set(roots)].filter((line) => model.metaByLine.has(line));
+      unique.sort((a, b) => a - b);
+      const out = [];
+      for (const line of unique) {
+        let shadowed = false;
+        for (const other of unique) {
+          if (other === line) continue;
+          if (isDescendantOrSelf(model, line, other)) {
+            shadowed = true;
+            break;
+          }
+        }
+        if (!shadowed) out.push(line);
+      }
+      return out;
+    }
+
+    function getLineByNominalSeriesCode(model, code) {
+      const target = String(code || "").trim();
+      if (!target) return null;
+      let best = null;
+      let bestDepth = Number.POSITIVE_INFINITY;
+      for (const meta of model.metaByLine.values()) {
+        if (String(meta.nominalSeriesCode || "").trim() !== target) continue;
+        const depth = String(meta.path || "").split(".").length;
+        if (depth < bestDepth) {
+          best = meta.line;
+          bestDepth = depth;
+        }
+      }
+      return best;
+    }
+
+    function validateCoreIdentity(model, monthsToCheck = 24, toleranceAbs = 5) {
+      const required = ["DPCERC", "DPCCRC", "DFXARC", "DGOERC", "DELGRC"];
+      for (const code of required) {
+        if (!model.nominalBySeries.has(code)) return false;
+      }
+
+      const allMonths = [...model.nominalBySeries.get("DPCERC").keys()].sort();
+      const months = allMonths.slice(Math.max(0, allMonths.length - monthsToCheck));
+      let checked = 0;
+
+      for (const tp of months) {
+        const pce = getSeriesValueByCode(model.nominalBySeries, "DPCERC", tp);
+        const core = getSeriesValueByCode(model.nominalBySeries, "DPCCRC", tp);
+        const food = getSeriesValueByCode(model.nominalBySeries, "DFXARC", tp);
+        const eg = getSeriesValueByCode(model.nominalBySeries, "DGOERC", tp);
+        const es = getSeriesValueByCode(model.nominalBySeries, "DELGRC", tp);
+        if ([pce, core, food, eg, es].some((v) => v === null)) continue;
+        checked += 1;
+        const lhs = pce - core;
+        const rhs = food + eg + es;
+        if (Math.abs(lhs - rhs) > toleranceAbs) return false;
+      }
+      return checked > 0;
+    }
+
+    function resolveCoreExclusions(model) {
+      const rootsBySeries = [
+        getLineByNominalSeriesCode(model, "DFXARC"),
+        getLineByNominalSeriesCode(model, "DGOERC"),
+        getLineByNominalSeriesCode(model, "DELGRC"),
+      ].filter((line) => Number.isFinite(line));
+
+      const allSeriesFound = rootsBySeries.length === 3;
+      const fallbackRoots = [71, 111, 165].filter((line) => model.metaByLine.has(line));
+      let roots = [];
+      let status = "failed";
+
+      if (allSeriesFound) {
+        roots = normalizeCoreRoots(model, rootsBySeries);
+        status = validateCoreIdentity(model) ? "ok" : "failed";
+      } else if (fallbackRoots.length) {
+        roots = normalizeCoreRoots(model, fallbackRoots);
+        status = "fallback";
+      }
+
+      const excludedSet = new Set();
+      for (const root of roots) collectDescendantLines(model, root, excludedSet);
+      return { roots, excludedSet, status };
+    }
+
+    function isExcludedInCore(line, model) {
+      if (!isCoreEnabled()) return false;
+      if (!model) return false;
+      return state.coreExcludedLines.has(line);
+    }
+
+    function getCoreAdjustedNominal(model, line, tp) {
+      const rootsSig = state.coreExclusionRoots.join(",");
+      const key = `${line}|${tp}|roots:${rootsSig}`;
+      if (model.coreAdjustedNominalCache.has(key)) return model.coreAdjustedNominalCache.get(key);
+
+      const base = getNominalLevelValue(model, line, tp);
+      if (base === null) {
+        model.coreAdjustedNominalCache.set(key, null);
+        return null;
+      }
+
+      let excludedSum = 0;
+      for (const root of state.coreExclusionRoots) {
+        if (!isDescendantOrSelf(model, root, line)) continue;
+        const rootNom = getNominalLevelValue(model, root, tp);
+        if (rootNom === null) continue;
+        excludedSum += rootNom;
+      }
+
+      let out = base - excludedSum;
+      if (out < 0 && out > -1e-8) out = 0;
+      if (out < 0) out = null;
+      model.coreAdjustedNominalCache.set(key, out);
+      return out;
+    }
+
+    function buildParentBreadcrumb(model, activeParentLine) {
+      const path = [];
+      const seen = new Set();
+      let cur = activeParentLine;
+      while (model.metaByLine.has(cur) && !seen.has(cur)) {
+        path.push(cur);
+        if (cur === model.rootLine) break;
+        seen.add(cur);
+        const meta = model.metaByLine.get(cur);
+        if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) break;
+        cur = meta.parent;
+      }
+      if (!path.length || path[path.length - 1] !== model.rootLine) path.push(model.rootLine);
+      path.reverse();
+      return path;
+    }
+
+    function pruneExpandedToActiveParent(model) {
+      const activeParentLine = getActiveParentLine(model);
+      const next = new Set();
+      for (const line of state.expanded) {
+        if (!model.metaByLine.has(line)) continue;
+        if (!isDescendantOrSelf(model, line, activeParentLine)) continue;
+        if (isExcludedInCore(line, model)) continue;
+        next.add(line);
+      }
+      next.add(activeParentLine);
+      state.expanded = next;
+    }
+
+    function getAverageWeightToParent(model, line, parentLine, tp) {
+      if (line === parentLine) return 1;
+      return getAverageWeight(model, line, parentLine, tp);
+    }
+
+    function getSeriesDlnByCode(seriesByCode, seriesCode, tp) {
+      const prevTp = prevTimePeriod(tp);
+      if (!prevTp) return null;
+      const p = getSeriesValueByCode(seriesByCode, seriesCode, tp);
+      const pPrev = getSeriesValueByCode(seriesByCode, seriesCode, prevTp);
+      if (p === null || pPrev === null || p <= 0 || pPrev <= 0) return null;
+      return Math.log(p) - Math.log(pPrev);
+    }
+
+    function isCoreContribContext(metricKey) {
+      return isCoreEnabled() && metricKey === "contrib_pp";
+    }
+
+    function shouldShowResidualForLine(model, line, metricKey) {
+      if (metricKey !== "contrib_pp") return false;
+      if (!model || !model.metaByLine.has(line)) return false;
+      if (!isCoreEnabled()) return true;
+      const activeParentLine = getActiveParentLine(model);
+      return !needsCoreReconstructionForLine(model, line, activeParentLine);
+    }
+
+    function getIncludedChildren(model, line) {
+      return (model.childrenByParent.get(line) || [])
+        .filter((child) => !isExcludedInCore(child, model));
+    }
+
+    function getEdgeSignForLine(model, line) {
+      const meta = model.metaByLine.get(line);
+      const desc = String(meta && meta.desc ? meta.desc : "").trim();
+      return /^Less:/i.test(desc) ? -1 : 1;
+    }
+
+    function getPathSignToAncestor(model, line, ancestorLine) {
+      if (line === ancestorLine) return 1;
+      const seen = new Set();
+      let cur = line;
+      let sign = 1;
+      while (model.metaByLine.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        sign *= getEdgeSignForLine(model, cur);
+        const meta = model.metaByLine.get(cur);
+        if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) break;
+        cur = meta.parent;
+        if (cur === ancestorLine) return sign;
+      }
+      return null;
+    }
+
+    function lineHasCoreExclusionInSubtree(model, line, activeParentLine) {
+      if (!isDescendantOrSelf(model, line, activeParentLine)) return false;
+      for (const excludedRoot of state.coreExclusionRoots) {
+        if (!isDescendantOrSelf(model, excludedRoot, activeParentLine)) continue;
+        if (isDescendantOrSelf(model, excludedRoot, line)) return true;
+      }
+      return false;
+    }
+
+    function needsCoreReconstructionForLine(model, line, activeParentLine) {
+      if (!isCoreEnabled()) return false;
+      if (!model.metaByLine.has(line)) return false;
+      if (isExcludedInCore(line, model)) return false;
+      return lineHasCoreExclusionInSubtree(model, line, activeParentLine);
+    }
+
+    function computeDirectContributionToBasis(model, line, basisParentLine, tp) {
+      const dln = getDln(model, line, tp);
+      if (dln === null) return null;
+      const wBar = getAverageWeightToParent(model, line, basisParentLine, tp);
+      if (wBar === null) return null;
+      const pathSign = getPathSignToAncestor(model, line, basisParentLine);
+      if (pathSign === null) return null;
+      return 100 * wBar * dln * pathSign;
+    }
+
+    function computeDirectCoreContributionToBasis(model, line, basisParentLine, tp) {
+      return computeDirectContributionToBasis(model, line, basisParentLine, tp);
+    }
+
+    function computeReconstructedCoreContribution(model, line, basisParentLine, tp) {
+      const key = `${line}|${basisParentLine}|${tp}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.reconstructedCoreContributionCache.has(key)) {
+        return model.reconstructedCoreContributionCache.get(key);
+      }
+
+      if (isExcludedInCore(line, model)) {
+        model.reconstructedCoreContributionCache.set(key, null);
+        return null;
+      }
+
+      const activeParentLine = getActiveParentLine(model);
+      if (!needsCoreReconstructionForLine(model, line, activeParentLine)) {
+        const direct = computeDirectCoreContributionToBasis(model, line, basisParentLine, tp);
+        model.reconstructedCoreContributionCache.set(key, direct);
+        return direct;
+      }
+
+      const children = getIncludedChildren(model, line);
+      if (!children.length) {
+        const leafVal = computeDirectCoreContributionToBasis(model, line, basisParentLine, tp);
+        model.reconstructedCoreContributionCache.set(key, leafVal);
+        return leafVal;
+      }
+
+      let sumChildren = 0;
+      let hasAnyChild = false;
+      for (const child of children) {
+        const v = computeReconstructedCoreContribution(model, child, basisParentLine, tp);
+        if (v === null) continue;
+        hasAnyChild = true;
+        sumChildren += v;
+      }
+
+      const out = hasAnyChild
+        ? sumChildren
+        : computeDirectCoreContributionToBasis(model, line, basisParentLine, tp);
+      model.reconstructedCoreContributionCache.set(key, out);
+      return out;
+    }
+
+    function buildCoreOfficialComparatorMap(model) {
+      const out = new Map();
+      if (model.metaByLine.has(model.rootLine)) {
+        out.set(model.rootLine, {
+          kind: "direct_series",
+          seriesCode: "DPCCRG",
+          label: "Core PCE (DPCCRG)",
+        });
+      }
+      if (model.metaByLine.has(70) && model.metaByLine.has(118)) {
+        out.set(70, {
+          kind: "direct_line",
+          line: 118,
+          label: "Other nondurable goods (line 118)",
+        });
+      }
+      if (model.metaByLine.has(161) && model.metaByLine.has(162)) {
+        out.set(161, {
+          kind: "direct_line",
+          line: 162,
+          label: "Water supply and sanitation (line 162)",
+        });
+      }
+      return out;
+    }
+
+    function buildCoreDeltaEligibleAncestors(model) {
+      const out = new Set();
+      for (const root of state.coreExclusionRoots) {
+        let cur = root;
+        const seen = new Set();
+        while (model.metaByLine.has(cur) && !seen.has(cur)) {
+          seen.add(cur);
+          out.add(cur);
+          const meta = model.metaByLine.get(cur);
+          if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) break;
+          cur = meta.parent;
+        }
+      }
+      return out;
+    }
+
+    function getCoreComparatorSpec(line) {
+      return state.coreOfficialComparatorByLine.get(line) || null;
+    }
+
+    function getCoreComparatorLabel(line) {
+      const spec = getCoreComparatorSpec(line);
+      return spec && spec.label ? spec.label : "official comparator";
+    }
+
+    function isCoreDeltaEligibleLine(model, line, activeParentLine) {
+      if (!isCoreEnabled()) return false;
+      if (!state.coreDeltaEligibleAncestors.has(line)) return false;
+      if (!needsCoreReconstructionForLine(model, line, activeParentLine)) return false;
+      return Boolean(getCoreComparatorSpec(line));
+    }
+
+    function computeOfficialComparableContribution(model, line, tp) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${line}|${tp}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.officialComparableContributionCache.has(key)) {
+        return model.officialComparableContributionCache.get(key);
+      }
+
+      const spec = getCoreComparatorSpec(line);
+      if (!spec) {
+        model.officialComparableContributionCache.set(key, null);
+        return null;
+      }
+
+      let out = null;
+      if (spec.kind === "direct_series") {
+        const dln = getSeriesDlnByCode(model.priceBySeries, spec.seriesCode, tp);
+        out = dln === null ? null : (100 * dln);
+      } else if (spec.kind === "direct_line" && Number.isFinite(spec.line) && model.metaByLine.has(spec.line)) {
+        const cmpLine = Number(spec.line);
+        if (isDescendantOrSelf(model, cmpLine, activeParentLine) || cmpLine === activeParentLine) {
+          out = computeDirectContributionToBasis(model, cmpLine, activeParentLine, tp);
+        }
+      }
+
+      model.officialComparableContributionCache.set(key, out);
+      return out;
+    }
+
+    function computeCoreDeltaContribution(model, line, tp) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${line}|${tp}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.coreDeltaContributionCache.has(key)) return model.coreDeltaContributionCache.get(key);
+
+      if (!isCoreEnabled()) {
+        model.coreDeltaContributionCache.set(key, null);
+        return null;
+      }
+      if (!isCoreDeltaEligibleLine(model, line, activeParentLine)) {
+        model.coreDeltaContributionCache.set(key, null);
+        return null;
+      }
+
+      const reconstructed = computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+      const official = computeOfficialComparableContribution(model, line, tp);
+      const out = (reconstructed !== null && official !== null) ? (official - reconstructed) : null;
+      model.coreDeltaContributionCache.set(key, out);
+      return out;
+    }
+
+    function computeCoreDeltaBucketValue(line, bucket, model) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.bucketCoreDeltaCache.has(key)) return model.bucketCoreDeltaCache.get(key);
+      const monthly = bucket.months.map((tp) => computeCoreDeltaContribution(model, line, tp));
+      const out = sumNonNull(monthly);
+      model.bucketCoreDeltaCache.set(key, out);
+      return out;
+    }
+
+    function setActiveParentLine(line, model) {
+      if (!model || !model.metaByLine.has(line)) return;
+      if (isExcludedInCore(line, model)) return;
+      state.activeParentLine = line;
+      pruneExpandedToActiveParent(model);
+      state.chartSeriesCache = new Map();
+      renderPivot();
+    }
+
+    function findNearestIncludedAncestor(model, line) {
+      let cur = line;
+      const seen = new Set();
+      while (model.metaByLine.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        if (!isExcludedInCore(cur, model)) return cur;
+        const meta = model.metaByLine.get(cur);
+        if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) break;
+        cur = meta.parent;
+      }
+      return model.rootLine;
+    }
+
+    function computeMetricValue(metricKey, line, tp, model) {
+      const meta = model.metaByLine.get(line);
+      if (!meta) return null;
+
+      if (metricKey === "price_level") {
+        return getSeriesValueByCode(model.priceBySeries, meta.priceSeriesCode, tp);
+      }
+      if (metricKey === "nominal_level") {
+        return getSeriesValueByCode(model.nominalBySeries, meta.nominalSeriesCode, tp);
+      }
+
+      const dln = getDln(model, line, tp);
+      if (metricKey === "mom_pct") {
+        return dln === null ? null : (100 * dln);
+      }
+
+      const parentLine = meta.parent;
+      const hasParent = parentLine !== null && model.metaByLine.has(parentLine);
+
+      if (metricKey === "weight_pct") {
+        if (!hasParent) return 100;
+        const w = getCurrentWeight(model, line, parentLine, tp);
+        return w === null ? null : (100 * w);
+      }
+
+      if (metricKey === "contrib_pp") {
+        const activeParentLine = getActiveParentLine(model);
+        if (isCoreEnabled()) {
+          return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+        }
+        if (line === activeParentLine) {
+          if (dln === null) return null;
+          return 100 * dln;
+        }
+        if (dln === null) return null;
+        const wBar = getAverageWeightToParent(model, line, activeParentLine, tp);
+        if (wBar === null) return null;
+        const pathSign = getPathSignToAncestor(model, line, activeParentLine);
+        if (pathSign === null) return null;
+        return 100 * wBar * dln * pathSign;
+      }
+
+      return null;
+    }
+
+    function lastNonNull(values) {
+      for (let i = values.length - 1; i >= 0; i--) {
+        if (values[i] !== null) return values[i];
+      }
+      return null;
+    }
+
+    function meanNonNull(values) {
+      let sum = 0;
+      let count = 0;
+      for (const v of values) {
+        if (v === null) continue;
+        sum += v;
+        count += 1;
+      }
+      return count ? (sum / count) : null;
+    }
+
+    function sumNonNull(values) {
+      let sum = 0;
+      let count = 0;
+      for (const v of values) {
+        if (v === null) continue;
+        sum += v;
+        count += 1;
+      }
+      return count ? sum : null;
+    }
+
+    function computeBucketMetricValue(metricKey, line, bucket, model) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${metricKey}|${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.bucketMetricCache.has(key)) return model.bucketMetricCache.get(key);
+
+      const monthly = bucket.months.map((tp) => computeMetricValue(metricKey, line, tp, model));
+      let out = null;
+
+      if (metricKey === "contrib_pp" || metricKey === "mom_pct") {
+        out = sumNonNull(monthly);
+      } else if (metricKey === "weight_pct") {
+        out = meanNonNull(monthly);
+      } else if (metricKey === "price_level" || metricKey === "nominal_level") {
+        out = lastNonNull(monthly);
+      }
+
+      model.bucketMetricCache.set(key, out);
+      return out;
+    }
+
+    function computeResidualBucketValue(parentLine, bucket, model) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${parentLine}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.bucketResidualCache.has(key)) return model.bucketResidualCache.get(key);
+
+      if (!shouldShowResidualForLine(model, parentLine, "contrib_pp")) {
+        model.bucketResidualCache.set(key, null);
+        return null;
+      }
+
+      const children = getIncludedChildren(model, parentLine);
+      if (!children.length) {
+        model.bucketResidualCache.set(key, null);
+        return null;
+      }
+
+      const parentVal = computeBucketMetricValue("contrib_pp", parentLine, bucket, model);
+      if (parentVal === null) {
+        model.bucketResidualCache.set(key, null);
+        return null;
+      }
+
+      let sumChildren = 0;
+      let hasAnyChild = false;
+      for (const childLine of children) {
+        const v = computeBucketMetricValue("contrib_pp", childLine, bucket, model);
+        if (v === null) continue;
+        hasAnyChild = true;
+        sumChildren += v;
+      }
+
+      const out = hasAnyChild ? (parentVal - sumChildren) : null;
+      model.bucketResidualCache.set(key, out);
+      return out;
+    }
+
+    function buildVisibleRows(model, metricKey) {
+      const out = [];
+      const activeParentLine = getActiveParentLine(model);
+      const coreContrib = isCoreContribContext(metricKey);
+      const walk = (line, depth) => {
+        if (isExcludedInCore(line, model)) return;
+        const meta = model.metaByLine.get(line);
+        if (!meta) return;
+        out.push({ type: "component", line, depth, meta });
+        if (coreContrib && isCoreDeltaEligibleLine(model, line, activeParentLine)) {
+          out.push({
+            type: "core_delta",
+            line,
+            depth: depth + 1,
+            label: `Delta vs official (${getCoreComparatorLabel(line)})`,
+          });
+        }
+        if (!state.expanded.has(line)) return;
+        const children = getIncludedChildren(model, line);
+        for (const child of children) walk(child, depth + 1);
+        if (children.length > 0 && shouldShowResidualForLine(model, line, metricKey)) {
+          const parentMeta = model.metaByLine.get(line);
+          const parentDesc = parentMeta && parentMeta.desc ? parentMeta.desc : `line ${line}`;
+          out.push({
+            type: "residual",
+            parentLine: line,
+            depth: depth + 1,
+            label: `Residual (${parentDesc})`,
+          });
+        }
+      };
+      walk(activeParentLine, 0);
+      return out;
+    }
+
+    function formatMetricValue(metricKey, value) {
+      if (value === null || value === undefined || Number.isNaN(value)) return "";
+      if (metricKey === "nominal_level") return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+      if (metricKey === "weight_pct") return value.toFixed(2);
+      if (metricKey === "price_level") return value.toFixed(3);
+      return value.toFixed(3);
+    }
+
+    function isLineSelectedForPlot(line) {
+      if (!state.plotSelectedByLine.has(line)) return true;
+      return Boolean(state.plotSelectedByLine.get(line));
+    }
+
+    function setLineSelectedForPlot(line, checked) {
+      state.plotSelectedByLine.set(line, Boolean(checked));
+    }
+
+    function prunePlotSelectionToModel(model) {
+      const next = new Map();
+      for (const [line, selected] of state.plotSelectedByLine.entries()) {
+        if (model.metaByLine.has(line)) next.set(line, selected);
+      }
+      state.plotSelectedByLine = next;
+    }
+
+    function ensureVisibleSelectionDefaults(visibleRows, model) {
+      let changed = false;
+      for (const row of visibleRows) {
+        if (row.type !== "component") continue;
+        if (row.line === model.rootLine) continue;
+        if (!state.plotSelectedByLine.has(row.line)) {
+          state.plotSelectedByLine.set(row.line, true);
+          changed = true;
+        }
+      }
+      if (changed) state.chartSeriesCache = new Map();
+    }
+
+    function buildSelectionSignatureForModel(model) {
+      const out = [];
+      for (const [line, selected] of state.plotSelectedByLine.entries()) {
+        if (!model.metaByLine.has(line)) continue;
+        if (isExcludedInCore(line, model)) continue;
+        out.push(`${line}:${selected ? 1 : 0}`);
+      }
+      out.sort();
+      return out.join(",");
+    }
+
+    function reconcileStackOrder(seriesIds) {
+      const uniqueSeriesIds = [];
+      const seenInput = new Set();
+      for (const id of seriesIds) {
+        if (seenInput.has(id)) continue;
+        seenInput.add(id);
+        uniqueSeriesIds.push(id);
+      }
+
+      const allowed = new Set(uniqueSeriesIds);
+      const next = [];
+      for (const id of state.plotStackOrderTopToBottom) {
+        if (allowed.has(id)) {
+          next.push(id);
+          allowed.delete(id);
+        }
+      }
+      for (const id of uniqueSeriesIds) {
+        if (!allowed.has(id)) continue;
+        next.push(id);
+        allowed.delete(id);
+      }
+
+      const prev = state.plotStackOrderTopToBottom;
+      const changed = (prev.length !== next.length) || prev.some((id, idx) => id !== next[idx]);
+      if (changed) {
+        state.plotStackOrderTopToBottom = next;
+        state.plotStackOrderVersion += 1;
+      }
+    }
+
+    function moveSeriesToIndex(seriesId, targetIndex, placeAfterTarget = false) {
+      const arr = [...state.plotStackOrderTopToBottom];
+      const fromIdx = arr.indexOf(seriesId);
+      if (fromIdx < 0) return false;
+      if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= arr.length) return false;
+
+      let toIdx = targetIndex + (placeAfterTarget ? 1 : 0);
+      if (fromIdx < toIdx) toIdx -= 1;
+      toIdx = Math.max(0, Math.min(arr.length - 1, toIdx));
+      if (toIdx === fromIdx) return false;
+
+      arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, seriesId);
+
+      state.plotStackOrderTopToBottom = arr;
+      state.plotStackOrderVersion += 1;
+      return true;
+    }
+
+    function getOrderedSeriesTopToBottom(series) {
+      const byId = new Map(series.map((s) => [s.id, s]));
+      const out = [];
+
+      for (const id of state.plotStackOrderTopToBottom) {
+        const s = byId.get(id);
+        if (!s) continue;
+        out.push(s);
+        byId.delete(id);
+      }
+      for (const s of series) {
+        if (!byId.has(s.id)) continue;
+        out.push(s);
+        byId.delete(s.id);
+      }
+      return out;
+    }
+
+    function getStackOrderSignature() {
+      return `${state.plotStackOrderVersion}|${state.plotStackOrderTopToBottom.join(",")}`;
+    }
+
+    function findLegendItemBySeriesId(seriesId) {
+      if (!seriesId) return null;
+      const items = outEl.querySelectorAll(".chart-legend-draggable");
+      for (const item of items) {
+        const id = String(item.getAttribute("data-series-id") || "").trim();
+        if (id === seriesId) return item;
+      }
+      return null;
+    }
+
+    function applyLegendDragIndicators() {
+      const items = outEl.querySelectorAll(".chart-legend-draggable");
+      for (const item of items) {
+        item.classList.remove("dragging", "drag-over-before", "drag-over-after");
+      }
+
+      if (state.dragSeriesId) {
+        const src = findLegendItemBySeriesId(state.dragSeriesId);
+        if (src) src.classList.add("dragging");
+      }
+      if (state.dragOverSeriesId && state.dragOverPlacement) {
+        const target = findLegendItemBySeriesId(state.dragOverSeriesId);
+        if (target) {
+          target.classList.add(state.dragOverPlacement === "after" ? "drag-over-after" : "drag-over-before");
+        }
+      }
+    }
+
+    function clearLegendDragState() {
+      state.dragSeriesId = null;
+      state.dragOverSeriesId = null;
+      state.dragOverPlacement = null;
+      applyLegendDragIndicators();
+    }
+
+    function getDropPlacement(targetEl, clientY) {
+      const rect = targetEl.getBoundingClientRect();
+      return ((clientY - rect.top) > (rect.height / 2)) ? "after" : "before";
+    }
+
+    function getChartExpandedSet(model, expandedSet, metricKey) {
+      const out = new Set(expandedSet || []);
+      // Keep selected-parent decomposition active even if user collapses the row.
+      out.add(getActiveParentLine(model));
+      return out;
+    }
+
+    function buildRootFrontierLines(model, expandedSet) {
+      const out = [];
+      const activeParentLine = getActiveParentLine(model);
+      const walk = (line) => {
+        if (isExcludedInCore(line, model)) return;
+        const children = model.childrenByParent.get(line) || [];
+        const includedChildren = children.filter((child) => !isExcludedInCore(child, model));
+        if (expandedSet.has(line) && includedChildren.length > 0) {
+          for (const child of includedChildren) walk(child);
+        } else {
+          out.push(line);
+        }
+      };
+
+      walk(activeParentLine);
+      return out;
+    }
+
+    function hashString(s) {
+      let h = 0;
+      const text = String(s || "");
+      for (let i = 0; i < text.length; i++) {
+        h = ((h << 5) - h) + text.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h);
+    }
+
+    function hexToRgb(hex) {
+      const cleaned = String(hex || "").trim().replace("#", "");
+      if (cleaned.length !== 6) return null;
+      const r = Number.parseInt(cleaned.slice(0, 2), 16);
+      const g = Number.parseInt(cleaned.slice(2, 4), 16);
+      const b = Number.parseInt(cleaned.slice(4, 6), 16);
+      if (![r, g, b].every(Number.isFinite)) return null;
+      return { r, g, b };
+    }
+
+    function hslToRgb(h, s, l) {
+      const hue = ((h % 360) + 360) % 360;
+      const sat = Math.max(0, Math.min(100, s)) / 100;
+      const lig = Math.max(0, Math.min(100, l)) / 100;
+      const c = (1 - Math.abs((2 * lig) - 1)) * sat;
+      const hp = hue / 60;
+      const x = c * (1 - Math.abs((hp % 2) - 1));
+      let r1 = 0;
+      let g1 = 0;
+      let b1 = 0;
+      if (hp >= 0 && hp < 1) [r1, g1, b1] = [c, x, 0];
+      else if (hp < 2) [r1, g1, b1] = [x, c, 0];
+      else if (hp < 3) [r1, g1, b1] = [0, c, x];
+      else if (hp < 4) [r1, g1, b1] = [0, x, c];
+      else if (hp < 5) [r1, g1, b1] = [x, 0, c];
+      else [r1, g1, b1] = [c, 0, x];
+      const m = lig - (c / 2);
+      return {
+        r: Math.round((r1 + m) * 255),
+        g: Math.round((g1 + m) * 255),
+        b: Math.round((b1 + m) * 255),
+      };
+    }
+
+    function parseColorToRgb(color) {
+      const c = String(color || "").trim();
+      if (!c) return null;
+      if (c.startsWith("#")) return hexToRgb(c);
+      const hslMatch = /^hsl\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%\s*\)$/i.exec(c);
+      if (hslMatch) {
+        return hslToRgb(Number(hslMatch[1]), Number(hslMatch[2]), Number(hslMatch[3]));
+      }
+      return null;
+    }
+
+    function colorDistanceRgb(a, b) {
+      const dr = a.r - b.r;
+      const dg = a.g - b.g;
+      const db = a.b - b.b;
+      return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+    }
+
+    function pickDistinctFallbackColor(seriesId, usedColors) {
+      const usedRgbs = usedColors.map(parseColorToRgb).filter(Boolean);
+      const seed = hashString(seriesId);
+      let bestColor = `hsl(${seed % 360}, 66%, 52%)`;
+      let bestScore = -1;
+
+      for (let i = 0; i < 60; i++) {
+        const hue = (seed + (i * 47)) % 360;
+        const sat = 58 + ((seed + (i * 13)) % 24);
+        const lig = 42 + ((seed + (i * 19)) % 18);
+        const candidate = `hsl(${hue}, ${sat}%, ${lig}%)`;
+        const rgb = parseColorToRgb(candidate);
+        if (!rgb) continue;
+        const minDist = usedRgbs.length
+          ? Math.min(...usedRgbs.map((used) => colorDistanceRgb(rgb, used)))
+          : 999;
+        if (minDist > bestScore) {
+          bestScore = minDist;
+          bestColor = candidate;
+        }
+      }
+      return bestColor;
+    }
+
+    function getSeriesColor(seriesId) {
+      if (state.seriesColorById.has(seriesId)) return state.seriesColorById.get(seriesId);
+
+      const usedColors = [...state.seriesColorById.values()];
+      let color = null;
+      for (const candidate of DISTINCT_BASE_COLORS) {
+        if (!usedColors.includes(candidate)) {
+          color = candidate;
+          break;
+        }
+      }
+      if (!color) color = pickDistinctFallbackColor(seriesId, usedColors);
+
+      state.seriesColorById.set(seriesId, color);
+      return color;
+    }
+
+    function getOpenResidualParents(model, expandedSet) {
+      const out = [];
+      for (const line of expandedSet) {
+        if (!model.metaByLine.has(line)) continue;
+        if (isExcludedInCore(line, model)) continue;
+        const children = (model.childrenByParent.get(line) || [])
+          .filter((child) => !isExcludedInCore(child, model));
+        if (children.length > 0) out.push(line);
+      }
+      out.sort((a, b) => a - b);
+      return out;
+    }
+
+    function buildChartSeries(model, metricKey, periodBuckets, expandedSet) {
+      const effectiveExpandedSet = getChartExpandedSet(model, expandedSet, metricKey);
+      const activeParentLine = getActiveParentLine(model);
+      const expansionSig = [...effectiveExpandedSet].sort((a, b) => a - b).join(",");
+      const bucketSig = periodBuckets.map((b) => b.id).join("|");
+      const selectionSig = buildSelectionSignatureForModel(model);
+      const cacheKey = `${metricKey}|${state.columnMode}|${bucketSig}|${expansionSig}|${selectionSig}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (state.chartSeriesCache.has(cacheKey)) return state.chartSeriesCache.get(cacheKey);
+
+      const series = [];
+      const frontierLines = buildRootFrontierLines(model, effectiveExpandedSet);
+      const uncheckedSums = new Array(periodBuckets.length).fill(0);
+      const uncheckedHas = new Array(periodBuckets.length).fill(false);
+      for (const line of frontierLines) {
+        const meta = model.metaByLine.get(line);
+        if (!meta) continue;
+        const values = periodBuckets.map((bucket) => computeBucketMetricValue(metricKey, line, bucket, model));
+        if (!values.some((v) => v !== null)) continue;
+
+        const shouldPlotLine = isLineSelectedForPlot(line);
+        if (shouldPlotLine) {
+          series.push({
+            id: `line:${line}`,
+            label: meta.desc,
+            values,
+          });
+        } else {
+          for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            if (v === null || v === undefined || Number.isNaN(v)) continue;
+            uncheckedHas[i] = true;
+            uncheckedSums[i] += v;
+          }
+        }
+      }
+
+      const openResidualSums = new Array(periodBuckets.length).fill(0);
+      const openResidualHas = new Array(periodBuckets.length).fill(false);
+      if (metricKey === "contrib_pp") {
+        const residualParents = getOpenResidualParents(model, effectiveExpandedSet)
+          .filter((line) => shouldShowResidualForLine(model, line, metricKey));
+        for (let i = 0; i < periodBuckets.length; i++) {
+          const bucket = periodBuckets[i];
+          for (const parentLine of residualParents) {
+            const v = computeResidualBucketValue(parentLine, bucket, model);
+            if (v === null || v === undefined || Number.isNaN(v)) continue;
+            openResidualHas[i] = true;
+            openResidualSums[i] += v;
+          }
+        }
+      }
+
+      const residualValues = periodBuckets.map((_, i) => {
+        let sum = 0;
+        let hasAny = false;
+        if (uncheckedHas[i]) {
+          hasAny = true;
+          sum += uncheckedSums[i];
+        }
+        if (metricKey === "contrib_pp" && openResidualHas[i]) {
+          hasAny = true;
+          sum += openResidualSums[i];
+        }
+        return hasAny ? sum : null;
+      });
+      if (residualValues.some((v) => v !== null)) {
+        series.push({
+          id: "residual-total",
+          label: "Residual",
+          values: residualValues,
+        });
+      }
+
+      for (let i = 0; i < series.length; i++) {
+        const s = series[i];
+        s.color = getSeriesColor(s.id);
+      }
+
+      state.chartSeriesCache.set(cacheKey, series);
+      return series;
+    }
+
+    function ensureOutputShell() {
+      const needsShell = !state.tableHostEl
+        || !state.chartHostEl
+        || !state.legendHostEl
+        || !outEl.contains(state.tableHostEl)
+        || !outEl.contains(state.chartHostEl)
+        || !outEl.contains(state.legendHostEl);
+      if (!needsShell) return;
+
+      if (state.tableInstance) {
+        try { state.tableInstance.destroy(); } catch (_) {}
+        state.tableInstance = null;
+        state.tableColumnsSignature = "";
+      }
+      if (state.chartInstance) {
+        try { state.chartInstance.dispose(); } catch (_) {}
+        state.chartInstance = null;
+      }
+
+      outEl.innerHTML = `
+        <section class="quant-panel quant-table-panel">
+          <div id="quantTableHost"></div>
+        </section>
+        <section id="quantChartWrap" class="quant-panel quant-chart-panel" data-stack-order="">
+          <div class="chart-body">
+            <div class="chart-main">
+              <div id="quantChartHost" class="chart-host"></div>
+            </div>
+            <aside class="chart-legend-panel" aria-label="Drag to reorder series">
+              <div class="chart-legend-title">Drag to reorder</div>
+              <div id="quantLegendHost" class="chart-legend"></div>
+            </aside>
+          </div>
+        </section>
+      `;
+
+      state.tableHostEl = document.getElementById("quantTableHost");
+      state.chartHostEl = document.getElementById("quantChartHost");
+      state.legendHostEl = document.getElementById("quantLegendHost");
+      state.chartWrapEl = document.getElementById("quantChartWrap");
+    }
+
+    function getBucketFieldKey(index) {
+      return `p_${index}`;
+    }
+
+    function buildTableRowsForTabulator(visibleRows, model, periodBuckets, metricKey, activeParentLine) {
+      const rows = [];
+      for (let i = 0; i < visibleRows.length; i++) {
+        const row = visibleRows[i];
+        const base = {
+          rowKey: `${row.type}:${row.line || row.parentLine || i}:${row.depth || 0}:${i}`,
+          rowType: row.type,
+          line: row.line || null,
+          depth: row.depth || 0,
+          hasChildren: false,
+          isExpanded: false,
+          isActiveParent: false,
+          plotSelectable: false,
+          plotSelected: false,
+          componentLabel: "",
+          titleText: "",
+        };
+
+        if (row.type === "component") {
+          const children = getIncludedChildren(model, row.line);
+          const isActiveParent = row.line === activeParentLine;
+          base.line = row.line;
+          base.hasChildren = children.length > 0;
+          base.isExpanded = state.expanded.has(row.line);
+          base.isActiveParent = isActiveParent;
+          base.plotSelectable = row.line !== model.rootLine;
+          base.plotSelected = isLineSelectedForPlot(row.line);
+          base.componentLabel = String(row.meta.desc || `Line ${row.line}`);
+          base.titleText = `Line ${row.line} | Nominal: ${row.meta.nominalSeriesCode || ""} | Price: ${row.meta.priceSeriesCode || ""}`;
+          for (let b = 0; b < periodBuckets.length; b++) {
+            const field = getBucketFieldKey(b);
+            base[field] = computeBucketMetricValue(metricKey, row.line, periodBuckets[b], model);
+          }
+        } else if (row.type === "residual") {
+          base.componentLabel = String(row.label || "Residual");
+          base.titleText = base.componentLabel;
+          for (let b = 0; b < periodBuckets.length; b++) {
+            const field = getBucketFieldKey(b);
+            base[field] = computeResidualBucketValue(row.parentLine, periodBuckets[b], model);
+          }
+        } else if (row.type === "core_delta") {
+          base.componentLabel = String(row.label || "Delta vs official");
+          base.titleText = base.componentLabel;
+          for (let b = 0; b < periodBuckets.length; b++) {
+            const field = getBucketFieldKey(b);
+            base[field] = computeCoreDeltaBucketValue(row.line, periodBuckets[b], model);
+          }
+        }
+
+        rows.push(base);
+      }
+      return rows;
+    }
+
+    function buildTableColumnsForTabulator(periodBuckets, metricKey) {
+      const staticCols = [
+        {
+          title: "Expand",
+          field: "expand",
+          width: 74,
+          hozAlign: "center",
+          headerSort: false,
+          formatter: (cell) => {
+            const data = cell.getData();
+            if (data.rowType !== "component" || !data.hasChildren) return `<span class="tree-spacer"></span>`;
+            const action = data.isExpanded ? "Collapse" : "Expand";
+            const text = `${action} ${data.componentLabel || ""}`;
+            return `<button type="button" class="tree-toggle" data-line="${data.line}" aria-label="${escapeHtml(text)}" title="${escapeHtml(text)}">${data.isExpanded ? "-" : "+"}</button>`;
+          },
+        },
+        {
+          title: "Focus",
+          field: "focus",
+          width: 82,
+          hozAlign: "center",
+          headerSort: false,
+          formatter: (cell) => {
+            const data = cell.getData();
+            if (data.rowType !== "component") return "";
+            const text = data.isActiveParent ? "Focused" : "Focus";
+            const action = data.isActiveParent
+              ? `Currently focused on ${data.componentLabel || ""}`
+              : `Focus on ${data.componentLabel || ""}`;
+            return `<button type="button" class="set-parent-btn set-parent-line" data-line="${data.line}" ${data.isActiveParent ? "disabled" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}">${text}</button>`;
+          },
+        },
+        {
+          title: "Plot",
+          field: "plot",
+          width: 62,
+          hozAlign: "center",
+          headerSort: false,
+          formatter: (cell) => {
+            const data = cell.getData();
+            if (data.rowType !== "component" || !data.plotSelectable) return "";
+            const action = `Include ${data.componentLabel || ""} in chart`;
+            return `<input type="checkbox" class="plot-select" data-line="${data.line}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
+          },
+        },
+        {
+          title: "Component",
+          field: "componentLabel",
+          minWidth: 360,
+          headerSort: false,
+          formatter: (cell) => {
+            const data = cell.getData();
+            const indentPx = Math.max(0, Number(data.depth || 0) * 16);
+            const secondaryClass = (data.rowType === "component") ? "" : " quant-row-secondary";
+            return `<div class="quant-node-label${secondaryClass}" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">${escapeHtml(data.componentLabel || "")}</div>`;
+          },
+        },
+      ];
+
+      const dynamicCols = periodBuckets.map((bucket, idx) => ({
+        title: bucket.label,
+        field: getBucketFieldKey(idx),
+        headerSort: false,
+        hozAlign: "right",
+        cssClass: "quant-cell-number",
+        formatter: (cell) => {
+          const v = cell.getValue();
+          if (v === null || v === undefined || Number.isNaN(v)) return "";
+          return formatMetricValue(metricKey, v);
+        },
+      }));
+
+      return [...staticCols, ...dynamicCols];
+    }
+
+    function renderTableWithTabulator(visibleRows, periodBuckets, metricKey, model, activeParentLine) {
+      if (!state.tableHostEl) return;
+      if (typeof Tabulator === "undefined") {
+        state.tableHostEl.innerHTML = `<div class="chart-empty">Tabulator failed to load.</div>`;
+        return;
+      }
+
+      const rows = buildTableRowsForTabulator(visibleRows, model, periodBuckets, metricKey, activeParentLine);
+      const signature = `${metricKey}|${periodBuckets.map((b) => b.id).join("|")}`;
+      const needsRecreate = !state.tableInstance || state.tableColumnsSignature !== signature;
+      if (needsRecreate) {
+        if (state.tableInstance) {
+          try { state.tableInstance.destroy(); } catch (_) {}
+        }
+        state.tableInstance = new Tabulator(state.tableHostEl, {
+          data: rows,
+          columns: buildTableColumnsForTabulator(periodBuckets, metricKey),
+          layout: "fitDataStretch",
+          index: "rowKey",
+          placeholder: "No data for current selection",
+          reactiveData: false,
+          rowFormatter: (row) => {
+            const data = row.getData();
+            const el = row.getElement();
+            if (data.rowType !== "component") el.classList.add("quant-row-secondary");
+          },
+        });
+        state.tableColumnsSignature = signature;
+      } else {
+        state.tableInstance.replaceData(rows);
+      }
+    }
+
+    function renderLegendPanel(series, stackOrderSignature = "") {
+      if (!state.legendHostEl) return;
+      const html = series.map((s) => `
+        <div class="chart-legend-item chart-legend-draggable" draggable="true" data-series-id="${escapeHtml(s.id)}" title="Drag to reorder">
+          <span class="chart-legend-swatch" style="background:${s.color}"></span>
+          <span>${escapeHtml(s.label)}</span>
+        </div>
+      `).join("");
+      state.legendHostEl.innerHTML = html || `<div class="chart-empty">No chartable series.</div>`;
+      if (state.chartWrapEl) state.chartWrapEl.setAttribute("data-stack-order", stackOrderSignature);
+      applyLegendDragIndicators();
+    }
+
+    function ensureChartInstance() {
+      if (!state.chartHostEl) return null;
+      if (typeof echarts === "undefined") return null;
+      if (state.chartHostEl.childElementCount && !state.chartInstance) {
+        state.chartHostEl.innerHTML = "";
+      }
+      if (state.chartInstance && state.chartInstance.getDom() !== state.chartHostEl) {
+        try { state.chartInstance.dispose(); } catch (_) {}
+        state.chartInstance = null;
+      }
+      if (!state.chartInstance) {
+        state.chartInstance = echarts.init(state.chartHostEl, null, { renderer: "canvas" });
+        if (!state.chartResizeBound) {
+          window.addEventListener("resize", () => {
+            if (state.chartInstance) state.chartInstance.resize();
+          });
+          state.chartResizeBound = true;
+        }
+      }
+      return state.chartInstance;
+    }
+
+    function showChartEmpty(message) {
+      if (state.chartInstance) {
+        try { state.chartInstance.dispose(); } catch (_) {}
+        state.chartInstance = null;
+      }
+      if (state.chartHostEl) {
+        state.chartHostEl.innerHTML = `<div class="chart-empty">${escapeHtml(message || "No chartable data for current selection.")}</div>`;
+      }
+    }
+
+    function buildStackedBarOption(buckets, series, metricKey) {
+      const categories = buckets.map((b) => b.label);
+      const rotate = categories.length > 12 ? 35 : 0;
+      return {
+        animation: false,
+        backgroundColor: "transparent",
+        color: series.map((s) => s.color),
+        tooltip: {
+          trigger: "axis",
+          axisPointer: { type: "shadow" },
+          backgroundColor: "rgba(18, 28, 44, 0.96)",
+          borderColor: "#2f4a6a",
+          borderWidth: 1,
+          textStyle: {
+            fontFamily: "JetBrains Mono, monospace",
+            color: "#dce8fa",
+            fontSize: 12,
+          },
+          extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
+          formatter: (params) => {
+            if (!params || !params.length) return "";
+            const header = escapeHtml(String(params[0].axisValueLabel || ""));
+            const lines = params
+              .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data))
+              .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
+            return [header, ...lines].join("<br/>");
+          },
+        },
+        grid: { left: 64, right: 18, top: 14, bottom: 72 },
+        xAxis: {
+          type: "category",
+          data: categories,
+          axisLabel: { color: "#a9b7cb", rotate, fontFamily: "JetBrains Mono, monospace" },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { lineStyle: { color: "#304661" } },
+        },
+        yAxis: {
+          type: "value",
+          axisLabel: {
+            color: "#a9b7cb",
+            fontFamily: "JetBrains Mono, monospace",
+            formatter: (v) => formatMetricValue(metricKey, Number(v)),
+          },
+          splitLine: { lineStyle: { color: "rgba(69, 97, 135, 0.35)" } },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { lineStyle: { color: "#304661" } },
+        },
+        series: series.map((s) => ({
+          name: s.label,
+          type: "bar",
+          stack: "total",
+          barMaxWidth: 30,
+          emphasis: { focus: "series" },
+          data: s.values.map((v) => (v === null || v === undefined || Number.isNaN(v) ? null : v)),
+        })),
+      };
+    }
+
+    function buildPeriodPieOption(bucket, series, metricKey) {
+      const data = series
+        .map((s) => ({ name: s.label, value: s.values[0], itemStyle: { color: s.color } }))
+        .filter((d) => Number.isFinite(d.value) && d.value > 0);
+      if (!data.length) return null;
+      return {
+        animation: false,
+        backgroundColor: "transparent",
+        tooltip: {
+          trigger: "item",
+          backgroundColor: "rgba(18, 28, 44, 0.96)",
+          borderColor: "#2f4a6a",
+          borderWidth: 1,
+          textStyle: {
+            fontFamily: "JetBrains Mono, monospace",
+            color: "#dce8fa",
+            fontSize: 12,
+          },
+          extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
+          formatter: (p) => `${escapeHtml(bucket.label)}<br/>${escapeHtml(p.name)}: ${escapeHtml(formatMetricValue(metricKey, p.value))}`,
+        },
+        series: [{
+          name: bucket.label,
+          type: "pie",
+          radius: ["34%", "72%"],
+          center: ["50%", "50%"],
+          avoidLabelOverlap: true,
+          itemStyle: { borderColor: "rgba(10, 15, 26, 0.9)", borderWidth: 1 },
+          label: { show: false, color: "#c6d4e8" },
+          data,
+        }],
+      };
+    }
+
+    function buildPeriodDivergingOption(bucket, series, metricKey) {
+      const values = series
+        .map((s) => ({ ...s, v: s.values[0] }))
+        .filter((s) => Number.isFinite(s.v) && s.v !== 0);
+      if (!values.length) return null;
+      return {
+        animation: false,
+        backgroundColor: "transparent",
+        color: values.map((s) => s.color),
+        tooltip: {
+          trigger: "axis",
+          axisPointer: { type: "shadow" },
+          backgroundColor: "rgba(18, 28, 44, 0.96)",
+          borderColor: "#2f4a6a",
+          borderWidth: 1,
+          textStyle: {
+            fontFamily: "JetBrains Mono, monospace",
+            color: "#dce8fa",
+            fontSize: 12,
+          },
+          extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
+          formatter: (params) => {
+            if (!params || !params.length) return "";
+            const header = escapeHtml(bucket.label);
+            const lines = params
+              .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data) && p.data !== 0)
+              .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
+            return [header, ...lines].join("<br/>");
+          },
+        },
+        grid: { left: 38, right: 28, top: 24, bottom: 50 },
+        xAxis: {
+          type: "value",
+          axisLabel: {
+            color: "#a9b7cb",
+            fontFamily: "JetBrains Mono, monospace",
+            formatter: (v) => formatMetricValue(metricKey, Number(v)),
+          },
+          splitLine: { lineStyle: { color: "rgba(69, 97, 135, 0.35)" } },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { lineStyle: { color: "#304661" } },
+        },
+        yAxis: {
+          type: "category",
+          data: [bucket.label],
+          axisLabel: { color: "#a9b7cb", fontFamily: "JetBrains Mono, monospace" },
+          axisLine: { lineStyle: { color: "#304661" } },
+          axisTick: { show: false },
+        },
+        series: values.map((s, idx) => ({
+          name: s.label,
+          type: "bar",
+          stack: "total",
+          barWidth: 48,
+          emphasis: { focus: "series" },
+          data: [s.v],
+          markLine: (idx === 0)
+            ? {
+              symbol: "none",
+              silent: true,
+              label: { show: false },
+              lineStyle: { color: "#95adce", width: 1.2 },
+              data: [{ xAxis: 0 }],
+            }
+            : undefined,
+        })),
+      };
+    }
+
+    function renderChartWithECharts({ buckets, series, metricKey, columnMode, stackOrderSignature = "" }) {
+      renderLegendPanel(series, stackOrderSignature);
+      if (!buckets.length || !series.length) {
+        showChartEmpty("No chartable data for current selection.");
+        return;
+      }
+
+      let option = null;
+      if (columnMode === "period" && buckets.length === 1) {
+        if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], series, metricKey);
+        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], series, metricKey);
+      } else {
+        option = buildStackedBarOption(buckets, series, metricKey);
+      }
+
+      if (!option) {
+        showChartEmpty("No chartable data for current selection.");
+        return;
+      }
+
+      const chart = ensureChartInstance();
+      if (!chart) {
+        showChartEmpty("ECharts failed to load.");
+        return;
+      }
+      chart.clear();
+      chart.setOption(option, true);
+      chart.resize();
+    }
+
+    function applyDateRangeToView({ showErrors = false } = {}) {
+      const { startYM, endYM, valid } = getSelectedYmRange();
+      if (!valid) {
+        if (showErrors) {
+          if (!startYM || !endYM) setError("Please choose both Start and End months.");
+          else setError("Start must be <= End.");
+          setStatus("Error");
+        }
+        return null;
+      }
+
+      const startTP = ymToTimePeriod(startYM);
+      const endTP = ymToTimePeriod(endYM);
+      const months = buildMonthRange(startTP, endTP);
+      if (!months.length) {
+        if (showErrors) {
+          setError("Selected month range is invalid.");
+          setStatus("Error");
+        }
+        return null;
+      }
+
+      const columnMode = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
+      const periodBuckets = buildPeriodBuckets(months, columnMode, startYM, endYM);
+      if (!periodBuckets.length) {
+        if (showErrors) {
+          setError("No columns available for selected mode/range.");
+          setStatus("Error");
+        }
+        return null;
+      }
+
+      state.columnMode = columnMode;
+      state.months = months;
+      state.periodBuckets = periodBuckets;
+      state.chartSeriesCache = new Map();
+
+      if (state.model) {
+        setError("");
+        renderPivot();
+      }
+      return { startYM, endYM, months, periodBuckets, columnMode };
+    }
+
+    function updateResetParentButtonState() {
+      if (!resetParentBtn) return;
+      if (!state.model) {
+        resetParentBtn.disabled = true;
+        return;
+      }
+      const activeParentLine = getActiveParentLine(state.model);
+      resetParentBtn.disabled = activeParentLine === state.model.rootLine;
+    }
+
+    function renderPivot() {
+      if (!state.model) return;
+      const model = state.model;
+      const activeParentLine = getActiveParentLine(model);
+      const periodBuckets = state.periodBuckets;
+      const metricKey = metricEl.value;
+      const columnMode = state.columnMode;
+      const visibleRows = buildVisibleRows(model, metricKey);
+      ensureVisibleSelectionDefaults(visibleRows, model);
+      updateResetParentButtonState();
+      ensureOutputShell();
+
+      const chartSeriesRaw = buildChartSeries(model, metricKey, periodBuckets, state.expanded);
+      reconcileStackOrder(chartSeriesRaw.map((s) => s.id));
+      const chartSeries = getOrderedSeriesTopToBottom(chartSeriesRaw);
+      const stackOrderSignature = getStackOrderSignature();
+      renderTableWithTabulator(visibleRows, periodBuckets, metricKey, model, activeParentLine);
+      renderChartWithECharts({
+        buckets: periodBuckets,
+        series: chartSeries,
+        metricKey,
+        columnMode,
+        stackOrderSignature,
+      });
+    }
+
+    async function run() {
+      setError("");
+      if (state.tableInstance) {
+        try { state.tableInstance.destroy(); } catch (_) {}
+        state.tableInstance = null;
+      }
+      if (state.chartInstance) {
+        try { state.chartInstance.dispose(); } catch (_) {}
+        state.chartInstance = null;
+      }
+      outEl.innerHTML = "";
+      state.tableHostEl = null;
+      state.chartHostEl = null;
+      state.legendHostEl = null;
+      state.chartWrapEl = null;
+      state.tableColumnsSignature = "";
+      setStatus("Loading...");
+      const prevExpanded = new Set(state.expanded);
+      const prevActiveParentLine = state.activeParentLine;
+      let range = null;
+      if (state.defaultsInitializedFromData) {
+        range = applyDateRangeToView({ showErrors: true });
+        if (!range) return;
+      }
+
+      try {
+        const priceUrl = toAbsoluteUrl(DATA_LOAD_CONFIG.PRICE_CSV_PATH);
+        const nominalUrl = toAbsoluteUrl(DATA_LOAD_CONFIG.NOMINAL_CSV_PATH);
+        const hierarchyUrl = toAbsoluteUrl(DATA_LOAD_CONFIG.HIERARCHY_CSV_PATH);
+        const useMemoryCache = DATA_LOAD_CONFIG.ENABLE_IN_MEMORY_CACHE;
+        const fetchCacheMode = useMemoryCache ? undefined : DATA_LOAD_CONFIG.FETCH_CACHE_MODE_WHEN_OFF;
+
+        const [priceRows, nominalRows, hierarchyRows] = await Promise.all([
+          loadCsv(priceUrl, { useMemoryCache, fetchCacheMode }),
+          loadCsv(nominalUrl, { useMemoryCache, fetchCacheMode }),
+          loadCsv(hierarchyUrl, { useMemoryCache, fetchCacheMode }),
+        ]);
+
+        if (!hierarchyRows.length) {
+          throw new Error(`Hierarchy file has no rows: ${hierarchyUrl}`);
+        }
+
+        const model = buildHierarchyModel(hierarchyRows);
+        model.priceBySeries = buildSeriesByCode(priceRows);
+        model.nominalBySeries = buildSeriesByCode(nominalRows);
+        resolveNodeSeriesCodes(model);
+        const coreResolved = resolveCoreExclusions(model);
+        state.coreExclusionRoots = coreResolved.roots;
+        state.coreExcludedLines = coreResolved.excludedSet;
+        state.coreIdentityStatus = coreResolved.status;
+        state.coreOfficialComparatorByLine = buildCoreOfficialComparatorMap(model);
+        state.coreDeltaEligibleAncestors = buildCoreDeltaEligibleAncestors(model);
+
+        const rootMeta = model.metaByLine.get(model.rootLine);
+        const rootNominalSeries = rootMeta ? String(rootMeta.nominalSeriesCode || "").trim() : "";
+        const rootPriceSeries = rootMeta ? String(rootMeta.priceSeriesCode || "").trim() : "";
+
+        if (!rootNominalSeries || !model.nominalBySeries.has(rootNominalSeries)) {
+          throw new Error(
+            `Root nominal series missing for line ${model.rootLine} (${rootNominalSeries}) in ${nominalUrl}`
+          );
+        }
+        if (!rootPriceSeries || !model.priceBySeries.has(rootPriceSeries)) {
+          throw new Error(
+            `Root price series missing for line ${model.rootLine} (${rootPriceSeries}) in ${priceUrl}`
+          );
+        }
+
+        if (!state.defaultsInitializedFromData) {
+          const detectedDefaultRange = computeDefaultYmRangeFromModel(model, 5);
+          if (detectedDefaultRange) {
+            setSelectorsFromYm(startMonthEl, startYearEl, detectedDefaultRange.startYM);
+            setSelectorsFromYm(endMonthEl, endYearEl, detectedDefaultRange.endYM);
+          } else {
+            const fallbackRange = defaultRangeLastMonths(60);
+            setSelectorsFromYm(startMonthEl, startYearEl, fallbackRange.start);
+            setSelectorsFromYm(endMonthEl, endYearEl, fallbackRange.end);
+          }
+          columnsEl.value = DEFAULT_COLUMN_MODE;
+          state.defaultsInitializedFromData = true;
+          range = applyDateRangeToView({ showErrors: true });
+        } else if (!range) {
+          range = applyDateRangeToView({ showErrors: true });
+        }
+        if (!range) {
+          throw new Error("Unable to determine a valid default date range from loaded data.");
+        }
+        const { months, periodBuckets, columnMode } = range;
+
+        state.model = model;
+        prunePlotSelectionToModel(model);
+        if (Number.isFinite(prevActiveParentLine) && model.metaByLine.has(prevActiveParentLine)) {
+          state.activeParentLine = prevActiveParentLine;
+        } else {
+          state.activeParentLine = model.rootLine;
+        }
+        if (isCoreEnabled() && isExcludedInCore(state.activeParentLine, model)) {
+          state.activeParentLine = findNearestIncludedAncestor(model, state.activeParentLine);
+        }
+        state.columnMode = columnMode;
+        state.months = months;
+        state.periodBuckets = periodBuckets;
+        const activeParentLine = getActiveParentLine(model);
+        const preservedExpanded = new Set();
+        for (const line of prevExpanded) {
+          if (!model.metaByLine.has(line)) continue;
+          if (!isDescendantOrSelf(model, line, activeParentLine)) continue;
+          if (isExcludedInCore(line, model)) continue;
+          preservedExpanded.add(line);
+        }
+        preservedExpanded.add(activeParentLine);
+        state.expanded = preservedExpanded;
+        state.chartSeriesCache = new Map();
+        renderPivot();
+        updateResetParentButtonState();
+
+        setStatus(`Loaded ${model.metaByLine.size} components.`);
+      } catch (e) {
+        setError(e && e.message ? e.message : e);
+        setStatus("Error");
+      }
+    }
+
+    const def = defaultRangeLastMonths(36);
+    populateMonthOptions(startMonthEl);
+    populateMonthOptions(endMonthEl);
+    populateYearOptions(startYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
+    populateYearOptions(endYearEl, MIN_SELECTABLE_YEAR, MAX_SELECTABLE_YEAR);
+    setSelectorsFromYm(startMonthEl, startYearEl, def.start);
+    setSelectorsFromYm(endMonthEl, endYearEl, def.end);
+    columnsEl.value = DEFAULT_COLUMN_MODE;
+    coreModeEl.value = state.coreMode;
+
+    resetParentBtn.addEventListener("click", () => {
+      if (!state.model) return;
+      setActiveParentLine(state.model.rootLine, state.model);
+    });
+    metricEl.addEventListener("change", () => {
+      if (state.model) renderPivot();
+    });
+    columnsEl.addEventListener("change", () => {
+      if (!state.model) return;
+      applyDateRangeToView({ showErrors: false });
+    });
+    coreModeEl.addEventListener("change", () => {
+      const nextMode = (coreModeEl.value === "core") ? "core" : "headline";
+      if (state.coreMode === nextMode) return;
+      state.coreMode = nextMode;
+      if (!state.model) return;
+
+      if (isCoreEnabled() && isExcludedInCore(state.activeParentLine, state.model)) {
+        state.activeParentLine = findNearestIncludedAncestor(state.model, state.activeParentLine);
+      }
+      pruneExpandedToActiveParent(state.model);
+      state.chartSeriesCache = new Map();
+      renderPivot();
+    });
+    for (const el of [startMonthEl, startYearEl, endMonthEl, endYearEl]) {
+      el.addEventListener("change", () => {
+        if (!state.model) return;
+        applyDateRangeToView({ showErrors: false });
+      });
+    }
+    outEl.addEventListener("change", (ev) => {
+      const cb = ev.target.closest("input.plot-select");
+      if (!cb || !state.model) return;
+      const line = Number(cb.getAttribute("data-line"));
+      if (!Number.isFinite(line)) return;
+      setLineSelectedForPlot(line, cb.checked);
+      state.chartSeriesCache = new Map();
+      renderPivot();
+    });
+    outEl.addEventListener("dragstart", (ev) => {
+      const item = ev.target.closest(".chart-legend-draggable");
+      if (!item) return;
+      const seriesId = String(item.getAttribute("data-series-id") || "").trim();
+      if (!seriesId) return;
+
+      state.dragSeriesId = seriesId;
+      state.dragOverSeriesId = null;
+      state.dragOverPlacement = null;
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", seriesId);
+      }
+      applyLegendDragIndicators();
+    });
+    outEl.addEventListener("dragover", (ev) => {
+      const target = ev.target.closest(".chart-legend-draggable");
+      if (!target || !state.dragSeriesId) return;
+      ev.preventDefault();
+
+      const targetId = String(target.getAttribute("data-series-id") || "").trim();
+      if (!targetId || targetId === state.dragSeriesId) {
+        if (state.dragOverSeriesId !== null || state.dragOverPlacement !== null) {
+          state.dragOverSeriesId = null;
+          state.dragOverPlacement = null;
+          applyLegendDragIndicators();
+        }
+        return;
+      }
+
+      const placement = getDropPlacement(target, ev.clientY);
+      if (state.dragOverSeriesId === targetId && state.dragOverPlacement === placement) return;
+      state.dragOverSeriesId = targetId;
+      state.dragOverPlacement = placement;
+      applyLegendDragIndicators();
+    });
+    outEl.addEventListener("drop", (ev) => {
+      const target = ev.target.closest(".chart-legend-draggable");
+      if (!target || !state.dragSeriesId) return;
+      ev.preventDefault();
+
+      const sourceId = state.dragSeriesId;
+      const targetId = String(target.getAttribute("data-series-id") || "").trim();
+      if (!targetId || targetId === sourceId) {
+        clearLegendDragState();
+        return;
+      }
+
+      const placement = getDropPlacement(target, ev.clientY);
+      const targetIdx = state.plotStackOrderTopToBottom.indexOf(targetId);
+      const changed = (targetIdx >= 0)
+        ? moveSeriesToIndex(sourceId, targetIdx, placement === "after")
+        : false;
+      clearLegendDragState();
+      if (changed) renderPivot();
+    });
+    outEl.addEventListener("dragleave", (ev) => {
+      const target = ev.target.closest(".chart-legend-draggable");
+      if (!target || !state.dragSeriesId) return;
+      const related = ev.relatedTarget;
+      if (related && target.contains(related)) return;
+
+      const targetId = String(target.getAttribute("data-series-id") || "").trim();
+      if (state.dragOverSeriesId === targetId) {
+        state.dragOverSeriesId = null;
+        state.dragOverPlacement = null;
+        applyLegendDragIndicators();
+      }
+    });
+    outEl.addEventListener("dragend", () => {
+      if (!state.dragSeriesId && !state.dragOverSeriesId) return;
+      clearLegendDragState();
+    });
+    outEl.addEventListener("click", (ev) => {
+      const setParentBtn = ev.target.closest("button.set-parent-line");
+      if (setParentBtn && state.model) {
+        const line = Number(setParentBtn.getAttribute("data-line"));
+        if (!Number.isFinite(line)) return;
+        setActiveParentLine(line, state.model);
+        return;
+      }
+      const btn = ev.target.closest("button.tree-toggle");
+      if (!btn || !state.model) return;
+      const line = Number(btn.getAttribute("data-line"));
+      if (!Number.isFinite(line)) return;
+      if (state.expanded.has(line)) state.expanded.delete(line);
+      else state.expanded.add(line);
+      renderPivot();
+    });
+
+    run();
+  </script>
+</body>
+</html>
+
+
+
+
+

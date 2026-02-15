@@ -1,0 +1,399 @@
+LineNumber,ParentLineNumber,Tier,Path,LineDescription,SeriesCode
+1,0,0,1,Personal consumption expenditures,DPCERC
+2,1,1,1.2,Goods,DGDSRC
+3,2,2,1.2.3,Durable goods,DDURRC
+4,3,3,1.2.3.4,Motor vehicles and parts,DMOTRC
+5,4,4,1.2.3.4.5,New motor vehicles (55),DNMVRC
+6,5,5,1.2.3.4.5.6,New autos,DNEARC
+7,6,6,1.2.3.4.5.6.7,New domestic autos,DNDCRC
+8,6,6,1.2.3.4.5.6.8,New foreign autos,DNFCRC
+9,5,5,1.2.3.4.5.9,New light trucks,DNWTRC
+10,4,4,1.2.3.4.10,Net purchases of used motor vehicles (56),DNPVRC
+11,10,5,1.2.3.4.10.11,Used autos,DNPURC
+12,11,6,1.2.3.4.10.11.12,Net transactions in used autos,DNETRC
+13,11,6,1.2.3.4.10.11.13,Used auto margin,DMARRC
+14,11,6,1.2.3.4.10.11.14,Employee reimbursement,DREERC
+15,10,5,1.2.3.4.10.15,Used light trucks,DUTRRC
+16,15,6,1.2.3.4.10.15.16,Net transactions in used trucks,DUTNRC
+17,15,6,1.2.3.4.10.15.17,Used truck margin,DUTMRC
+18,4,4,1.2.3.4.18,Motor vehicle parts and accessories (58),DMVPRC
+19,18,5,1.2.3.4.18.19,Tires,DTATRC
+20,18,5,1.2.3.4.18.20,Accessories and parts,DPAARC
+21,3,3,1.2.3.21,Furnishings and durable household equipment,DFDHRC
+22,21,4,1.2.3.21.22,Furniture and furnishings (parts of 31 and 32),DFFFRC
+23,22,5,1.2.3.21.22.23,Furniture,DFNRRC
+24,22,5,1.2.3.21.22.24,"Clocks, lamps, lighting fixtures, and other household decorative items",DCLFRC
+25,22,5,1.2.3.21.22.25,Carpets and other floor coverings,DFLRRC
+26,22,5,1.2.3.21.22.26,Window coverings,DWCTRC
+27,21,4,1.2.3.21.27,Household appliances (part of 33),DAPPRC
+28,27,5,1.2.3.21.27.28,Major household appliances,DMHARC
+29,27,5,1.2.3.21.27.29,Small electric household appliances,DSEARC
+30,21,4,1.2.3.21.30,"Glassware, tableware, and household utensils (34)",DUTERC
+31,30,5,1.2.3.21.30.31,Dishes and flatware,DCHNRC
+32,30,5,1.2.3.21.30.32,Nonelectric cookware and tableware,DNECRC
+33,21,4,1.2.3.21.33,Tools and equipment for house and garden (35),DTOORC
+34,33,5,1.2.3.21.33.34,"Tools, hardware, and supplies",DHDWRC
+35,33,5,1.2.3.21.33.35,Outdoor equipment and supplies,DLWNRC
+36,3,3,1.2.3.36,Recreational goods and vehicles,DREQRC
+37,36,4,1.2.3.36.37,"Video, audio, photographic, and information processing equipment and media (75, 76, and part of 93)",DVAPRC
+38,37,5,1.2.3.36.37.38,Video and audio equipment,DVAARC
+39,38,6,1.2.3.36.37.38.39,Televisions,DTVSRC
+40,38,6,1.2.3.36.37.38.40,Other video equipment,DOVARC
+41,38,6,1.2.3.36.37.38.41,Audio equipment,DAUDRC
+42,38,6,1.2.3.36.37.38.42,Recording media,DRECRC
+43,42,7,1.2.3.36.37.38.42.43,"Audio discs, tapes, vinyl, and permanent digital downloads",DRTDRC
+44,42,7,1.2.3.36.37.38.42.44,"Video discs, tapes, and permanent digital downloads",DOVERC
+45,37,5,1.2.3.36.37.45,Photographic equipment,DCAMRC
+46,37,5,1.2.3.36.37.46,Information processing equipment,DIPERC
+47,46,6,1.2.3.36.37.46.47,Personal computers/tablets and peripheral equipment,DCPPRC
+48,46,6,1.2.3.36.37.46.48,Computer software and accessories,DCPSRC
+49,46,6,1.2.3.36.37.46.49,"Calculators, typewriters, and other information processing equipment",DOIPRC
+50,36,4,1.2.3.36.50,"Sporting equipment, supplies, guns, and ammunition (part of 80)",DSPGRC
+51,36,4,1.2.3.36.51,Sports and recreational vehicles (79),DWHLRC
+52,51,5,1.2.3.36.51.52,Motorcycles,DMCYRC
+53,51,5,1.2.3.36.51.53,Bicycles and accessories,DBCYRC
+54,51,5,1.2.3.36.51.54,"Pleasure boats, aircraft, and other recreational vehicles",DBARRC
+55,54,6,1.2.3.36.51.54.55,Pleasure boats,DBOARC
+56,54,6,1.2.3.36.51.54.56,Pleasure aircraft,DAIRRC
+57,54,6,1.2.3.36.51.54.57,Other recreational vehicles,DREVRC
+58,36,4,1.2.3.36.58,Recreational books (part of 90),DRBKRC
+59,36,4,1.2.3.36.59,Musical instruments (part of 80),DMSCRC
+60,3,3,1.2.3.60,Other durable goods,DODGRC
+61,60,4,1.2.3.60.61,Jewelry and watches (part of 119),DJRYRC
+62,61,5,1.2.3.60.61.62,Jewelry,DJLYRC
+63,61,5,1.2.3.60.61.63,Watches,DWTCRC
+64,60,4,1.2.3.60.64,Therapeutic appliances and equipment (42),DTAERC
+65,64,5,1.2.3.60.64.65,Therapeutic medical equipment,DTMERC
+66,64,5,1.2.3.60.64.66,Corrective eyeglasses and contact lenses,DEYERC
+67,60,4,1.2.3.60.67,Educational books (96),DEBKRC
+68,60,4,1.2.3.60.68,Luggage and similar personal items (part of 119),DLUGRC
+69,60,4,1.2.3.60.69,Telephone and related communication equipment,DTCERC
+70,2,2,1.2.70,Nondurable goods,DNDGRC
+71,70,3,1.2.70.71,Food and beverages purchased for off-premises consumption,DFXARC
+72,71,4,1.2.70.71.72,Food and nonalcoholic beverages purchased for off-premises consumption (4),DTFDRC
+73,72,5,1.2.70.71.72.73,Food purchased for off-premises consumption,DFOFRC
+74,73,6,1.2.70.71.72.73.74,Cereals and bakery products,DCBPRC
+75,74,7,1.2.70.71.72.73.74.75,Cereals,DGRARC
+76,74,7,1.2.70.71.72.73.74.76,Bakery products,DBAKRC
+77,73,6,1.2.70.71.72.73.77,Meats and poultry,DMAPRC
+78,77,7,1.2.70.71.72.73.77.78,Beef and veal,DBEERC
+79,77,7,1.2.70.71.72.73.77.79,Pork,DPORRC
+80,77,7,1.2.70.71.72.73.77.80,Other meats,DMEARC
+81,77,7,1.2.70.71.72.73.77.81,Poultry,DPOURC
+82,73,6,1.2.70.71.72.73.82,Fish and seafood,DFISRC
+83,73,6,1.2.70.71.72.73.83,"Milk, dairy products, and eggs",DMDERC
+84,83,7,1.2.70.71.72.73.83.84,Fresh milk,DMILRC
+85,83,7,1.2.70.71.72.73.83.85,Processed dairy products,DDAIRC
+86,83,7,1.2.70.71.72.73.83.86,Eggs,DGGSRC
+87,73,6,1.2.70.71.72.73.87,Fats and oils,DFATRC
+88,73,6,1.2.70.71.72.73.88,Fresh fruits and vegetables,DFAVRC
+89,88,7,1.2.70.71.72.73.88.89,Fruit (fresh),DFRURC
+90,88,7,1.2.70.71.72.73.88.90,Vegetables (fresh),DVEGRC
+91,73,6,1.2.70.71.72.73.91,Processed fruits and vegetables,DPFVRC
+92,73,6,1.2.70.71.72.73.92,Sugar and sweets,DSWERC
+93,73,6,1.2.70.71.72.73.93,"Food products, not elsewhere classified",DOFDRC
+94,72,5,1.2.70.71.72.94,Nonalcoholic beverages purchased for off-premises consumption,DNBVRC
+95,94,6,1.2.70.71.72.94.95,"Coffee, tea, and other beverage materials",DCTMRC
+96,94,6,1.2.70.71.72.94.96,"Mineral waters, soft drinks, and vegetable juices",DJNBRC
+97,71,4,1.2.70.71.97,Alcoholic beverages purchased for off-premises consumption (5),DAOPRC
+98,97,5,1.2.70.71.97.98,Spirits,DLIQRC
+99,97,5,1.2.70.71.97.99,Wine,DWINRC
+100,97,5,1.2.70.71.97.100,Beer,DMLTRC
+101,71,4,1.2.70.71.101,Food produced and consumed on farms (6),DFFDRC
+102,70,3,1.2.70.102,Clothing and footwear,DCLORC
+103,102,4,1.2.70.102.103,Garments,DGARRC
+104,103,5,1.2.70.102.103.104,Women's and girls' clothing (10),DWGCRC
+105,103,5,1.2.70.102.103.105,Men's and boys' clothing (11),DMBCRC
+106,103,5,1.2.70.102.103.106,Children's and infants' clothing (12),DCICRC
+107,102,4,1.2.70.102.107,Other clothing materials and footwear (13 and 17),DOCCRC
+108,107,5,1.2.70.102.107.108,Clothing materials,DCSMRC
+109,107,5,1.2.70.102.107.109,Standard clothing issued to military personnel,DMICRC
+110,107,5,1.2.70.102.107.110,Shoes and other footwear,DSHURC
+111,70,3,1.2.70.111,Gasoline and other energy goods,DGOERC
+112,111,4,1.2.70.111.112,"Motor vehicle fuels, lubricants, and fluids (59)",DMFLRC
+113,112,5,1.2.70.111.112.113,Gasoline and other motor fuel,DGASRC
+114,112,5,1.2.70.111.112.114,Lubricants and fluids,DLUBRC
+115,111,4,1.2.70.111.115,Fuel oil and other fuels (29),DFULRC
+116,115,5,1.2.70.111.115.116,Fuel oil,DOILRC
+117,115,5,1.2.70.111.115.117,Other fuels,DLPFRC
+118,70,3,1.2.70.118,Other nondurable goods,DONGRC
+119,118,4,1.2.70.118.119,Pharmaceutical and other medical products (40 and 41),DPHMRC
+120,119,5,1.2.70.118.119.120,Pharmaceutical products,DPNPRC
+121,120,6,1.2.70.118.119.120.121,Prescription drugs,DRXDRC
+122,120,6,1.2.70.118.119.120.122,Nonprescription drugs,DNRDRC
+123,119,5,1.2.70.118.119.123,Other medical products,DOMPRC
+124,118,4,1.2.70.118.124,"Recreational items (parts of 80, 92, and 93)",DREIRC
+125,124,5,1.2.70.118.124.125,"Games, toys, and hobbies",DDOLRC
+126,124,5,1.2.70.118.124.126,Pets and related products,DPRPRC
+127,124,5,1.2.70.118.124.127,"Flowers, seeds, and potted plants",DFLORC
+128,124,5,1.2.70.118.124.128,Film and photographic supplies,DFLMRC
+129,118,4,1.2.70.118.129,Household supplies (parts of 32 and 36),DHOURC
+130,129,5,1.2.70.118.129.130,Household cleaning products,DCLERC
+131,129,5,1.2.70.118.129.131,Household paper products,DPAPRC
+132,129,5,1.2.70.118.129.132,Household linens,DLINRC
+133,129,5,1.2.70.118.129.133,Sewing items,DSEWRC
+134,129,5,1.2.70.118.129.134,Miscellaneous household products,DMHPRC
+135,118,4,1.2.70.118.135,Personal care products (part of 118),DOPCRC
+136,135,5,1.2.70.118.135.136,"Hair, dental, shaving, and miscellaneous personal care products except electrical products",DOPHRC
+137,135,5,1.2.70.118.135.137,Cosmetic / perfumes / bath / nail preparations and implements,DCOSRC
+138,135,5,1.2.70.118.135.138,Electric appliances for personal care,DEAPRC
+139,118,4,1.2.70.118.139,Tobacco (127),DTOBRC
+140,118,4,1.2.70.118.140,"Magazines, newspapers, and stationery (part of 90)",DNEWRC
+141,140,5,1.2.70.118.140.141,Newspapers and periodicals,DMAGRC
+142,140,5,1.2.70.118.140.142,Stationery and miscellaneous printed materials,DSTYRC
+143,118,4,1.2.70.118.143,Net expenditures abroad by U.S. residents (131),DNFRRC
+144,143,5,1.2.70.118.143.144,Expenditures abroad by U.S. residents,DABDRC
+145,144,6,1.2.70.118.143.144.145,Government employees' expenditures abroad,DARTRC
+146,144,6,1.2.70.118.143.144.146,Private employees' expenditures abroad,DARSRC
+147,143,5,1.2.70.118.143.147,Less: Personal remittances in kind to nonresidents,DREMRC
+148,1,1,1.148,Services,DSERRC
+149,148,2,1.148.149,Household consumption expenditures (for services),DHCERC
+150,149,3,1.148.149.150,Housing and utilities,DHUTRC
+151,150,4,1.148.149.150.151,Housing,DHSGRC
+152,151,5,1.148.149.150.151.152,Rental of tenant-occupied nonfarm housing (20),DTENRC
+153,152,6,1.148.149.150.151.152.153,Tenant-occupied mobile homes,DTMHRC
+154,152,6,1.148.149.150.151.152.154,Tenant-occupied stationary homes,DTSPRC
+155,152,6,1.148.149.150.151.152.155,Tenant landlord durables,DTLDRC
+156,151,5,1.148.149.150.151.156,Imputed rental of owner-occupied nonfarm housing (21),DOWNRC
+157,156,6,1.148.149.150.151.156.157,Owner-occupied mobile homes,DOMHRC
+158,156,6,1.148.149.150.151.156.158,Owner-occupied stationary homes,DOSTRC
+159,151,5,1.148.149.150.151.159,Rental value of farm dwellings (22),DFARRC
+160,151,5,1.148.149.150.151.160,Group housing (23),DGRHRC
+161,150,4,1.148.149.150.161,Household utilities,DUTLRC
+162,161,5,1.148.149.150.161.162,Water supply and sanitation (25),DWRSRC
+163,162,6,1.148.149.150.161.162.163,Water supply and sewage maintenance,DWSMRC
+164,162,6,1.148.149.150.161.162.164,Garbage and trash collection,DREFRC
+165,161,5,1.148.149.150.161.165,Electricity and gas,DELGRC
+166,165,6,1.148.149.150.161.165.166,Electricity (27),DELCRC
+167,165,6,1.148.149.150.161.165.167,Natural gas (28),DGHERC
+168,149,3,1.148.149.168,Health care,DHLCRC
+169,168,4,1.148.149.168.169,Outpatient services,DOUTRC
+170,169,5,1.148.149.168.169.170,Physician services (44),DPHYRC
+171,169,5,1.148.149.168.169.171,Dental services (45),DDENRC
+172,169,5,1.148.149.168.169.172,Paramedical services (46),DPMSRC
+173,172,6,1.148.149.168.169.172.173,Home health care,DHHCRC
+174,172,6,1.148.149.168.169.172.174,Medical laboratories,DMLBRC
+175,172,6,1.148.149.168.169.172.175,Other professional medical services,DOMDRC
+176,175,7,1.148.149.168.169.172.175.176,Specialty outpatient care facilities and health and allied services,DOMSRC
+177,175,7,1.148.149.168.169.172.175.177,All other professional medical services,DOMORC
+178,168,4,1.148.149.168.178,Hospital and nursing home services,DHPNRC
+179,178,5,1.148.149.168.178.179,Hospitals (51),DHSPRC
+180,179,6,1.148.149.168.178.179.180,Nonprofit hospitals' services to households,DNPHRC
+181,179,6,1.148.149.168.178.179.181,Proprietary hospitals,DFPHRC
+182,179,6,1.148.149.168.178.179.182,Government hospitals,DGVHRC
+183,178,5,1.148.149.168.178.183,Nursing homes (52),DNRSRC
+184,183,6,1.148.149.168.178.183.184,Nonprofit nursing homes' services to households,DNPNRC
+185,183,6,1.148.149.168.178.183.185,Proprietary and government nursing homes,DFPNRC
+186,149,3,1.148.149.186,Transportation services,DTRSRC
+187,186,4,1.148.149.186.187,Motor vehicle services,DMVSRC
+188,187,5,1.148.149.186.187.188,Motor vehicle maintenance and repair (60),DVMRRC
+189,187,5,1.148.149.186.187.189,Other motor vehicle services (61),DOVSRC
+190,189,6,1.148.149.186.187.189.190,Motor vehicle leasing,DMVLRC
+191,190,7,1.148.149.186.187.189.190.191,Auto leasing,DALERC
+192,190,7,1.148.149.186.187.189.190.192,Truck leasing,DTLERC
+193,189,6,1.148.149.186.187.189.193,Motor vehicle rental,DMVRRC
+194,189,6,1.148.149.186.187.189.194,Parking fees and tolls,DPFTRC
+195,186,4,1.148.149.186.195,Public transportation,DPUBRC
+196,195,5,1.148.149.186.195.196,Ground transportation (63),DGRDRC
+197,196,6,1.148.149.186.195.196.197,Railway transportation,DIRRRC
+198,196,6,1.148.149.186.195.196.198,Road transportation,DROTRC
+199,198,7,1.148.149.186.195.196.198.199,Intercity buses,DIBURC
+200,198,7,1.148.149.186.195.196.198.200,Taxicabs and ride sharing services,DTAXRC
+201,198,7,1.148.149.186.195.196.198.201,Intracity mass transit,DIMTRC
+202,198,7,1.148.149.186.195.196.198.202,Other road transportation service,DORTRC
+203,195,5,1.148.149.186.195.203,Air transportation (64),DAITRC
+204,195,5,1.148.149.186.195.204,Water transportation (65),DWATRC
+205,149,3,1.148.149.205,Recreation services,DRCARC
+206,205,4,1.148.149.205.206,"Membership clubs, sports centers, parks, theaters, and museums (82)",DRLSRC
+207,206,5,1.148.149.205.206.207,Membership clubs and participant sports centers,DMDFRC
+208,206,5,1.148.149.205.206.208,"Amusement parks, campgrounds, and related recreational services",DORSRC
+209,206,5,1.148.149.205.206.209,Admissions to specified spectator amusements,DADMRC
+210,209,6,1.148.149.205.206.209.210,Motion picture theaters,DMOVRC
+211,209,6,1.148.149.205.206.209.211,"Live entertainment, excluding sports",DLIGRC
+212,209,6,1.148.149.205.206.209.212,Spectator sports,DSPERC
+213,206,5,1.148.149.205.206.213,Museums and libraries,DMUSRC
+214,205,4,1.148.149.205.214,"Audio-video, photographic, and information processing equipment services (parts of 77 and 93)",DAVPRC
+215,214,5,1.148.149.205.214.215,"Cable, satellite, and other live television services",DCTVRC
+216,214,5,1.148.149.205.214.216,Photo processing,DFDVRC
+217,214,5,1.148.149.205.214.217,Photo studios,DPICRC
+218,214,5,1.148.149.205.214.218,"Repair and rental of audio-visual, photographic, and information processing equipment",DAPIRC
+219,214,5,1.148.149.205.214.219,Video and audio streaming and rental,DVIDRC
+220,219,6,1.148.149.205.214.219.220,Video streaming and rental,LA000233
+221,219,6,1.148.149.205.214.219.221,Audio streaming and radio services (including satellite radio),LA000232
+222,205,4,1.148.149.205.222,Gambling (91),DGAMRC
+223,222,5,1.148.149.205.222.223,Casino gambling,DCASRC
+224,222,5,1.148.149.205.222.224,Lotteries,DLOTRC
+225,222,5,1.148.149.205.222.225,Pari-mutuel net receipts,DPARRC
+226,205,4,1.148.149.205.226,"Other recreational services (81, 94, and part of 92)",DOTRRC
+227,226,5,1.148.149.205.226.227,Veterinary and other services for pets,DVETRC
+228,226,5,1.148.149.205.226.228,Package tours,DHOLRC
+229,226,5,1.148.149.205.226.229,Maintenance and repair of recreational vehicles and sports equipment,DRRERC
+230,149,3,1.148.149.230,Food services and accommodations,DFSARC
+231,230,4,1.148.149.230.231,Food services,DFSERC
+232,231,5,1.148.149.230.231.232,Purchased meals and beverages (102),DPMBRC
+233,232,6,1.148.149.230.231.232.233,Meals and nonalcoholic beverages,DMABRC
+234,233,7,1.148.149.230.231.232.233.234,Meals at schools,DMSLRC
+235,234,8,1.148.149.230.231.232.233.234.,Elementary and secondary school lunches,DESLRC
+236,234,8,1.148.149.230.231.232.233.234.,Higher education school lunches,DHSLRC
+237,233,7,1.148.149.230.231.232.233.237,Other purchased meals,DOPMRC
+238,237,8,1.148.149.230.231.232.233.237.,Meals at limited service eating places,DMLSRC
+239,237,8,1.148.149.230.231.232.233.237.,Meals at other eating places,DMOERC
+240,237,8,1.148.149.230.231.232.233.237.,Meals at drinking places,DMDPRC
+241,232,6,1.148.149.230.231.232.241,Alcohol in purchased meals,DAPMRC
+242,231,5,1.148.149.230.231.242,Food furnished to employees (including military) (103),DFOORC
+243,242,6,1.148.149.230.231.242.243,Food supplied to civilians,DCFDRC
+244,242,6,1.148.149.230.231.242.244,Food supplied to military,DMFDRC
+245,230,4,1.148.149.230.245,Accommodations (104),DACCRC
+246,245,5,1.148.149.230.245.246,Hotels and motels,DHOTRC
+247,245,5,1.148.149.230.245.247,Housing at schools,DSCHRC
+248,149,3,1.148.149.248,Financial services and insurance,DIFSRC
+249,248,4,1.148.149.248.249,Financial services,DFNLRC
+250,249,5,1.148.149.248.249.250,Financial services furnished without payment (107),DIMPRC
+251,250,6,1.148.149.248.249.250.251,Commercial banks,DIMCRC
+252,250,6,1.148.149.248.249.250.252,Other depository institutions and regulated investment companies,DIMNRC
+253,250,6,1.148.149.248.249.250.253,Pension funds,DPENRC
+254,249,5,1.148.149.248.249.254,"Financial service charges, fees, and commissions (108)",DOFIRC
+255,254,6,1.148.149.248.249.254.255,Financial service charges and fees,DFEERC
+256,254,6,1.148.149.248.249.254.256,Securities commissions,DEQTRC
+257,256,7,1.148.149.248.249.254.256.257,Direct commissions,DDCTRC
+258,257,8,1.148.149.248.249.254.256.257.,Exchange-listed equities,DDCERC
+259,257,8,1.148.149.248.249.254.256.257.,Other direct commissions,DDCORC
+260,256,7,1.148.149.248.249.254.256.260,Indirect commissions,DICTRC
+261,260,8,1.148.149.248.249.254.256.260.,Over-the-counter equity securities,DICVRC
+262,260,8,1.148.149.248.249.254.256.260.,Other imputed commissions,DICORC
+263,256,7,1.148.149.248.249.254.256.263,Mutual fund sales charges,DMUTRC
+264,254,6,1.148.149.248.249.254.264,Portfolio management and investment advice services,DPMIRC
+265,254,6,1.148.149.248.249.254.265,"Trust, fiduciary, and custody activities",DTRURC
+266,248,4,1.148.149.248.266,Insurance,DINSRC
+267,266,5,1.148.149.248.266.267,Life insurance (110),DLIFRC
+268,266,5,1.148.149.248.266.268,Net household insurance (111),DFINRC
+269,268,6,1.148.149.248.266.268.269,Household insurance premiums and premium supplements,DFIPRC
+270,268,6,1.148.149.248.266.268.270,Less: Household insurance normal losses,DFIBRC
+271,266,5,1.148.149.248.266.271,Net health insurance (112),DHINRC
+272,271,6,1.148.149.248.266.271.272,Medical care and hospitalization,DMINRC
+273,271,6,1.148.149.248.266.271.273,Income loss,DIINRC
+274,271,6,1.148.149.248.266.271.274,Workers' compensation,DPWCRC
+275,266,5,1.148.149.248.266.275,Net motor vehicle and other transportation insurance (116),DTINRC
+276,149,3,1.148.149.276,Other services,DOTSRC
+277,276,4,1.148.149.276.277,Communication,DCOMRC
+278,277,5,1.148.149.276.277.278,Telecommunication services (71),DTCSRC
+279,278,6,1.148.149.276.277.278.279,"Land-line telephone services, local charges",DLOCRC
+280,278,6,1.148.149.276.277.278.280,"Land-line telephone services, long-distance charges",DLDTRC
+281,278,6,1.148.149.276.277.278.281,Cellular telephone services,DCELRC
+282,277,5,1.148.149.276.277.282,Postal and delivery services (68),DPSSRC
+283,282,6,1.148.149.276.277.282.283,First-class postal service (by U.S. Postal Service),DPSTRC
+284,282,6,1.148.149.276.277.282.284,Other delivery services (by non-U.S. postal facilities),DODSRC
+285,277,5,1.148.149.276.277.285,Internet access (72),DINTRC
+286,276,4,1.148.149.276.286,Education services,DTEDRC
+287,286,5,1.148.149.276.286.287,Higher education (97),DHEDRC
+288,287,6,1.148.149.276.286.287.288,Proprietary and public higher education,DGEDRC
+289,287,6,1.148.149.276.286.287.289,Nonprofit private higher education services to households,DPEDRC
+290,286,5,1.148.149.276.286.290,"Nursery, elementary, and secondary schools (98)",DNEHRC
+291,290,6,1.148.149.276.286.290.291,Elementary and secondary schools,DESCRC
+292,290,6,1.148.149.276.286.290.292,Day care and nursery schools,DNSCRC
+293,286,5,1.148.149.276.286.293,Commercial and vocational schools (99),DVEDRC
+294,276,4,1.148.149.276.294,Professional and other services (121),DPRSRC
+295,294,5,1.148.149.276.294.295,Legal services,DGALRC
+296,294,5,1.148.149.276.294.296,Accounting and other business services,DPRORC
+297,296,6,1.148.149.276.294.296.297,Tax preparation and other related services,DTAPRC
+298,296,6,1.148.149.276.294.296.298,Employment agency services,DGENRC
+299,296,6,1.148.149.276.294.296.299,Other personal business services,DTHERC
+300,294,5,1.148.149.276.294.300,Labor organization dues,DUNSRC
+301,294,5,1.148.149.276.294.301,Professional association dues,DAXSRC
+302,294,5,1.148.149.276.294.302,Funeral and burial services,DFUNRC
+303,276,4,1.148.149.276.303,Personal care and clothing services (14 and parts of 17 and 118),DPERRC
+304,303,5,1.148.149.276.303.304,Personal care services,DPCSRC
+305,304,6,1.148.149.276.303.304.305,Hairdressing salons and personal grooming establishments,DBBBRC
+306,304,6,1.148.149.276.303.304.306,Miscellaneous personal care services,DMPCRC
+307,303,5,1.148.149.276.303.307,Clothing and footwear services,DCFSRC
+308,307,6,1.148.149.276.303.307.308,Laundry and drycleaning services,DDRYRC
+309,307,6,1.148.149.276.303.307.309,"Clothing repair, rental, and alterations",DLGRRC
+310,307,6,1.148.149.276.303.307.310,Repair and hire of footwear,DSCLRC
+311,276,4,1.148.149.276.311,Social services and religious activities (120),DSOCRC
+312,311,5,1.148.149.276.311.312,Child care,DCHCRC
+313,311,5,1.148.149.276.311.313,Social assistance,DSCWRC
+314,313,6,1.148.149.276.311.313.314,Homes for the elderly,DELDRC
+315,313,6,1.148.149.276.311.313.315,Residential mental health and substance abuse,DMENRC
+316,313,6,1.148.149.276.311.313.316,Individual and family services,DFAMRC
+317,313,6,1.148.149.276.311.313.317,Vocational rehabilitation services,DVOCRC
+318,313,6,1.148.149.276.311.313.318,Community food and housing / emergency / other relief services,DCFORC
+319,313,6,1.148.149.276.311.313.319,"Other social assistance, not elsewere classified",DSIARC
+320,311,5,1.148.149.276.311.320,Social advocacy and civic and social organizations,DSADRC
+321,311,5,1.148.149.276.311.321,Religious organizations' services to households,DRELRC
+322,311,5,1.148.149.276.311.322,Foundations and grantmaking and giving services to households,DGIVRC
+323,276,4,1.148.149.276.323,"Household maintenance (parts of 31, 33, and 36)",DHHMRC
+324,323,5,1.148.149.276.323.324,Domestic services,DDMSRC
+325,323,5,1.148.149.276.323.325,"Moving, storage, and freight services",DMSERC
+326,323,5,1.148.149.276.323.326,"Repair of furniture, furnishings, and floor coverings",DFRERC
+327,323,5,1.148.149.276.323.327,Repair of household appliances,DERERC
+328,323,5,1.148.149.276.323.328,Other household services,DMHSRC
+329,276,4,1.148.149.276.329,Net foreign travel,DFORRC
+330,329,5,1.148.149.276.329.330,Foreign travel by U.S. residents (129),DFTRRC
+331,330,6,1.148.149.276.329.330.331,Passenger fares for foreign travel,DAFTRC
+332,330,6,1.148.149.276.329.330.332,U.S. travel outside the United States,DUSTRC
+333,330,6,1.148.149.276.329.330.333,U.S. student expenditures,DUSSRC
+334,329,5,1.148.149.276.329.334,Less: Expenditures in the United States by nonresidents (130),DEXFRC
+335,334,6,1.148.149.276.329.334.335,Foreign travel in the United States,DFTURC
+336,334,6,1.148.149.276.329.334.336,Medical expenditures of foreigners,DMEFRC
+337,334,6,1.148.149.276.329.334.337,Expenditures of foreign students in the United States,DEFSRC
+338,148,2,1.148.338,Final consumption expenditures of nonprofit institutions serving households (NPISHs) (132),DNPIRC
+339,338,3,1.148.338.339,Gross output of nonprofit institutions (133),DNPERC
+340,339,4,1.148.338.339.340,"Health, gross output",DHLGRC
+341,340,5,1.148.338.339.340.341,"Outpatient services, gross output",DOUGRC
+342,340,5,1.148.338.339.340.342,"Nonprofit hospitals, gross output",DHSORC
+343,340,5,1.148.338.339.340.343,"Nonprofit nursing homes, gross output",DNXORC
+344,339,4,1.148.338.339.344,"Recreation services, gross output",DRCGRC
+345,339,4,1.148.338.339.345,"Education services, gross output",DEDGRC
+346,339,4,1.148.338.339.346,"Social services, gross output",DSSGRC
+347,339,4,1.148.338.339.347,"Religious organizations, gross output",DREORC
+348,339,4,1.148.338.339.348,"Foundations and grantmaking and giving establishments, gross output",DFXORC
+349,339,4,1.148.338.339.349,"Social advocacy establishments, gross output",DSAORC
+350,339,4,1.148.338.339.350,"Civic and social organizations, gross output",DCIORC
+351,339,4,1.148.338.339.351,"Professional advocacy, gross output",DSNGRC
+352,338,3,1.148.338.352,Less: Receipts from sales of goods and services by nonprofit institutions (134),DNPSRC
+353,352,4,1.148.338.352.353,Health services to households,DHLRRC
+354,353,5,1.148.338.352.353.354,Outpatient services to households,DOUSRC
+355,353,5,1.148.338.352.353.355,Nonprofit hospitals services to households,DNPHRC
+356,353,5,1.148.338.352.353.356,Nonprofit nursing homes services to households,DNPNRC
+357,352,4,1.148.338.352.357,Recreation services to households,DRCRRC
+358,352,4,1.148.338.352.358,Education services to households,DEDRRC
+359,352,4,1.148.338.352.359,Social services to households,DSSRRC
+360,352,4,1.148.338.352.360,Religious organizations' services to households,DRELRC
+361,352,4,1.148.338.352.361,Foundations and grantmaking and giving services to households,DGIVRC
+362,352,4,1.148.338.352.362,Services of social advocacy establishments to households,DSASRC
+363,352,4,1.148.338.352.363,Civic and social organizations' services to households,DCISRC
+364,352,4,1.148.338.352.364,Professional advocacy services to households,DSNRRC
+365,,0,365,Control group,DCGPRC
+366,,0,366,PCE food and energy,DPFERC
+367,,0,367,PCE energy goods and services,DNRGRC
+368,,0,368,PCE excluding food,DPXFRC
+369,,0,369,PCE excluding energy,DPXERC
+370,,0,370,PCE excluding food and energy,DPCCRC
+371,,0,371,PCE goods excluding food and energy,LA000062
+372,,0,372,PCE services excluding energy,LA000063
+373,,0,373,Market-based PCE,DPCMRC
+374,,0,374,Market-based PCE motor vehicles and parts,DMOMRC
+375,,0,375,Market-based PCE durable goods other than motor vehicles and parts,DDUMRC
+376,,0,376,Market-based PCE food and beverages purchased for off-premises consumption,DMFXRC
+377,,0,377,Market-based PCE clothing and footwear,DCLMRC
+378,,0,378,Market-based PCE gasoline and other energy goods,DGOERC
+379,,0,379,Market-based PCE other nondurable goods,DNDXRC
+380,,0,380,Market-based PCE services,DSEMRC
+381,,0,381,Market-based PCE housing services,DHSMRC
+382,,0,382,Market-based PCE household utilities,DUTLRC
+383,,0,383,Market-based PCE health care,DHLCRC
+384,,0,384,Market-based PCE transportation services,DTRSRC
+385,,0,385,Market-based PCE recreation services,DRCMRC
+386,,0,386,Market-based PCE food services and accommodations,DFSMRC
+387,,0,387,Market-based PCE financial services and insurance,DFIMRC
+388,,0,388,Market-based PCE other services,DOTMRC
+389,,0,389,Market-based PCE communication services,DCOMRC
+390,,0,390,Market-based PCE education,DTEDRC
+391,,0,391,Market-based PCE professional services,DPRMRC
+392,,0,392,Market-based PCE personal care and clothing services,DPERRC
+393,,0,393,Market-based PCE child care,DCHCRC
+394,,0,394,Market-based PCE household maintenance,DHMMRC
+395,,0,395,Market-based PCE food and energy,DPMFRC
+396,,0,396,Market-based PCE excluding food,DMXFRC
+397,,0,397,Market-based PCE excluding energy,DPMERC
+398,,0,398,Market-based PCE excluding food and energy,DPCXRC
