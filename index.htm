@@ -1611,6 +1611,16 @@
       return out.join(",");
     }
 
+    function getDefaultSeriesInsertionOrder(seriesIds) {
+      const ids = [...seriesIds];
+      const residualId = "residual-total";
+      const residualIdx = ids.indexOf(residualId);
+      if (residualIdx <= 0) return ids;
+      ids.splice(residualIdx, 1);
+      ids.unshift(residualId);
+      return ids;
+    }
+
     function reconcileStackOrder(seriesIds) {
       const uniqueSeriesIds = [];
       const seenInput = new Set();
@@ -1628,7 +1638,8 @@
           allowed.delete(id);
         }
       }
-      for (const id of uniqueSeriesIds) {
+      const defaultInsertionOrder = getDefaultSeriesInsertionOrder(uniqueSeriesIds);
+      for (const id of defaultInsertionOrder) {
         if (!allowed.has(id)) continue;
         next.push(id);
         allowed.delete(id);
@@ -2199,7 +2210,34 @@
       }
     }
 
-    function buildStackedBarOption(buckets, series, metricKey) {
+    function getSeriesForStackDrawing(legendOrderedSeries, metricKey, columnMode) {
+      const isPeriod = columnMode === "period";
+      const isStackedType = !isPeriod || (metricKey === "contrib_pp");
+      if (!isStackedType) return [...legendOrderedSeries];
+      return [...legendOrderedSeries].reverse();
+    }
+
+    function buildLegendRankBySeriesId(legendOrderedSeries) {
+      const rank = new Map();
+      for (let i = 0; i < legendOrderedSeries.length; i++) {
+        const s = legendOrderedSeries[i];
+        if (s && s.id) rank.set(String(s.id), i);
+      }
+      return rank;
+    }
+
+    function sortTooltipParamsByLegendOrder(params, legendRankBySeriesId) {
+      const items = Array.isArray(params) ? [...params] : [];
+      return items.sort((a, b) => {
+        const aId = String((a && a.seriesId) || "");
+        const bId = String((b && b.seriesId) || "");
+        const aRank = legendRankBySeriesId.has(aId) ? legendRankBySeriesId.get(aId) : Number.POSITIVE_INFINITY;
+        const bRank = legendRankBySeriesId.has(bId) ? legendRankBySeriesId.get(bId) : Number.POSITIVE_INFINITY;
+        return aRank - bRank;
+      });
+    }
+
+    function buildStackedBarOption(buckets, series, metricKey, legendRankBySeriesId) {
       const categories = buckets.map((b) => b.label);
       const rotate = categories.length > 12 ? 35 : 0;
       return {
@@ -2221,7 +2259,8 @@
           formatter: (params) => {
             if (!params || !params.length) return "";
             const header = escapeHtml(String(params[0].axisValueLabel || ""));
-            const lines = params
+            const orderedParams = sortTooltipParamsByLegendOrder(params, legendRankBySeriesId);
+            const lines = orderedParams
               .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data))
               .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
             return [header, ...lines].join("<br/>");
@@ -2247,6 +2286,7 @@
           axisTick: { lineStyle: { color: "#304661" } },
         },
         series: series.map((s) => ({
+          id: s.id,
           name: s.label,
           type: "bar",
           stack: "total",
@@ -2291,7 +2331,7 @@
       };
     }
 
-    function buildPeriodDivergingOption(bucket, series, metricKey) {
+    function buildPeriodDivergingOption(bucket, series, metricKey, legendRankBySeriesId) {
       const values = series
         .map((s) => ({ ...s, v: s.values[0] }))
         .filter((s) => Number.isFinite(s.v) && s.v !== 0);
@@ -2315,7 +2355,8 @@
           formatter: (params) => {
             if (!params || !params.length) return "";
             const header = escapeHtml(bucket.label);
-            const lines = params
+            const orderedParams = sortTooltipParamsByLegendOrder(params, legendRankBySeriesId);
+            const lines = orderedParams
               .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data) && p.data !== 0)
               .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
             return [header, ...lines].join("<br/>");
@@ -2341,6 +2382,7 @@
           axisTick: { show: false },
         },
         series: values.map((s, idx) => ({
+          id: s.id,
           name: s.label,
           type: "bar",
           stack: "total",
@@ -2361,7 +2403,11 @@
     }
 
     function renderChartWithECharts({ buckets, series, metricKey, columnMode, stackOrderSignature = "" }) {
-      renderLegendPanel(series, stackOrderSignature);
+      const legendSeries = series;
+      const plotSeries = getSeriesForStackDrawing(legendSeries, metricKey, columnMode);
+      const legendRankBySeriesId = buildLegendRankBySeriesId(legendSeries);
+
+      renderLegendPanel(legendSeries, stackOrderSignature);
       if (!buckets.length || !series.length) {
         showChartEmpty("No chartable data for current selection.");
         return;
@@ -2369,10 +2415,10 @@
 
       let option = null;
       if (columnMode === "period" && buckets.length === 1) {
-        if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], series, metricKey);
-        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], series, metricKey);
+        if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], legendSeries, metricKey);
+        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey, legendRankBySeriesId);
       } else {
-        option = buildStackedBarOption(buckets, series, metricKey);
+        option = buildStackedBarOption(buckets, plotSeries, metricKey, legendRankBySeriesId);
       }
 
       if (!option) {
