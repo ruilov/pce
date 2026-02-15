@@ -392,6 +392,21 @@
     .quant-chart-panel.compare-grouping .chart-legend-panel { display: none; }
     .quant-chart-panel.compare-grouping .chart-main { flex: 1 1 100%; }
     .muted { color: var(--text-3); font-size: 12px; }
+    .source-note {
+      margin: 10px 2px 0;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-3);
+    }
+    .source-note a {
+      color: var(--text-2);
+      text-decoration: none;
+    }
+    .source-note a:hover,
+    .source-note a:focus-visible {
+      color: var(--text-1);
+      text-decoration: underline;
+    }
     .error { color: var(--danger); white-space: pre-wrap; }
     code {
       background: #1b2b42;
@@ -467,6 +482,9 @@
   </div>
 
   <div id="out"></div>
+  <p class="source-note">
+    <a href="https://apps.bea.gov/iTable/?reqid=19&step=2&isuri=1&categories=underlying" target="_blank" rel="noopener noreferrer">Source: U.S. Bureau of Economic Analysis (BEA), National Income and Product Accounts (NIPA), Underlying Detail Tables 2.4.4U (Price Indexes for Personal Consumption Expenditures by Type of Product) and 2.4.5U (Personal Consumption Expenditures by Type of Product).</a>
+  </p>
 
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/js/tabulator.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
