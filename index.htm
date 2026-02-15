@@ -146,7 +146,17 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.2px;
-      min-height: 38px;
+      min-height: 30px;
+    }
+    .tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+      padding: 4px 8px;
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+    }
+    .tabulator .tabulator-header .tabulator-col .tabulator-col-title {
+      white-space: nowrap;
+      line-height: 1.1;
     }
     .tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover,
     .tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="asc"],
@@ -1582,7 +1592,7 @@
       if (displayedValue === null || displayedValue === undefined || Number.isNaN(displayedValue)) return "";
       if (metricKey === "nominal_level") return displayedValue.toLocaleString(undefined, { maximumFractionDigits: 1 });
       if (metricKey === "weight_pct") return `${displayedValue.toFixed(2)}%`;
-      if (metricKey === "contrib_pp") return `${displayedValue.toFixed(3)}%`;
+      if (metricKey === "contrib_pp") return `${displayedValue.toFixed(2)}%`;
       if (metricKey === "price_level") return displayedValue.toFixed(3);
       return displayedValue.toFixed(3);
     }
@@ -2074,12 +2084,43 @@
       return rows;
     }
 
+    function computeNumericColumnWidth(periodBuckets) {
+      const labels = (periodBuckets || []).map((b) => String((b && b.label) || "")).filter(Boolean);
+      if (!labels.length) return 90;
+
+      let maxTextPx = 0;
+      let measured = false;
+      try {
+        const canvas = computeNumericColumnWidth._canvas || (computeNumericColumnWidth._canvas = document.createElement("canvas"));
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.font = '600 11px Inter, "Segoe UI", Roboto, Arial, sans-serif';
+          for (const label of labels) {
+            maxTextPx = Math.max(maxTextPx, ctx.measureText(label).width);
+          }
+          measured = true;
+        }
+      } catch (_) {}
+
+      if (!measured) {
+        for (const label of labels) {
+          maxTextPx = Math.max(maxTextPx, label.length * 7);
+        }
+      }
+
+      const rawWidth = Math.ceil(maxTextPx + 22);
+      return Math.max(78, Math.min(118, rawWidth));
+    }
+
     function buildTableColumnsForTabulator(periodBuckets, metricKey) {
+      const numericWidth = computeNumericColumnWidth(periodBuckets);
       const staticCols = [
         {
           title: "Expand",
           field: "expand",
           width: 74,
+          widthGrow: 0,
+          widthShrink: 0,
           hozAlign: "center",
           headerSort: false,
           formatter: (cell) => {
@@ -2094,6 +2135,8 @@
           title: "Focus",
           field: "focus",
           width: 82,
+          widthGrow: 0,
+          widthShrink: 0,
           hozAlign: "center",
           headerSort: false,
           formatter: (cell) => {
@@ -2110,6 +2153,8 @@
           title: "Plot",
           field: "plot",
           width: 62,
+          widthGrow: 0,
+          widthShrink: 0,
           hozAlign: "center",
           headerSort: false,
           formatter: (cell) => {
@@ -2122,7 +2167,9 @@
         {
           title: "Component",
           field: "componentLabel",
-          minWidth: 360,
+          minWidth: 280,
+          widthGrow: 0,
+          widthShrink: 1,
           headerSort: false,
           formatter: (cell) => {
             const data = cell.getData();
@@ -2136,6 +2183,11 @@
       const dynamicCols = periodBuckets.map((bucket, idx) => ({
         title: bucket.label,
         field: getBucketFieldKey(idx),
+        width: numericWidth,
+        minWidth: numericWidth,
+        maxWidth: numericWidth,
+        widthGrow: 0,
+        widthShrink: 0,
         headerSort: false,
         hozAlign: "right",
         cssClass: "quant-cell-number",
@@ -2168,7 +2220,7 @@
         state.tableInstance = new Tabulator(state.tableHostEl, {
           data: rows,
           columns: buildTableColumnsForTabulator(periodBuckets, metricKey),
-          layout: "fitDataStretch",
+          layout: "fitDataTable",
           index: "rowKey",
           placeholder: "No data for current selection",
           reactiveData: false,
