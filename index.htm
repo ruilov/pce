@@ -482,6 +482,7 @@
       expanded: new Set(),
       chartSeriesCache: new Map(),
       plotSelectedByLine: new Map(),
+      plotResidualSelected: false,
       plotStackOrderTopToBottom: [],
       plotStackOrderVersion: 0,
       activeParentLine: null,
@@ -1814,6 +1815,7 @@
         if (isExcludedInCore(line, model)) continue;
         out.push(`${line}:${selected ? 1 : 0}`);
       }
+      out.push(`residual:${state.plotResidualSelected ? 1 : 0}`);
       out.sort();
       return out.join(",");
     }
@@ -2183,7 +2185,7 @@
         if (!openResidualHas[i]) return null;
         return openResidualSums[i];
       });
-      if (residualValues.some((v) => v !== null)) {
+      if (state.plotResidualSelected && residualValues.some((v) => v !== null)) {
         series.push({
           id: "residual-total",
           label: "Residual",
@@ -2326,8 +2328,8 @@
             hasChildren: false,
             isExpanded: false,
             isActiveParent: false,
-            plotSelectable: false,
-            plotSelected: false,
+            plotSelectable: true,
+            plotSelected: state.plotResidualSelected,
             plotIndeterminate: false,
             componentLabel: "Residual",
             titleText: "Residual",
@@ -2387,8 +2389,12 @@
           headerSort: false,
           formatter: (cell) => {
             const data = cell.getData();
-            if (data.rowType !== "component" || !data.plotSelectable) return "";
+            if (!data.plotSelectable) return "";
             const action = `Include ${data.componentLabel || ""} in chart`;
+            if (data.rowType === "residual_total") {
+              return `<input type="checkbox" class="plot-select" data-series-id="residual-total" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
+            }
+            if (data.rowType !== "component") return "";
             const indeterminateFlag = data.plotIndeterminate ? "1" : "0";
             return `<input type="checkbox" class="plot-select" data-line="${data.line}" data-indeterminate="${indeterminateFlag}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
           },
@@ -3304,6 +3310,13 @@
     outEl.addEventListener("change", (ev) => {
       const cb = ev.target.closest("input.plot-select");
       if (!cb || !state.model) return;
+      const seriesId = String(cb.getAttribute("data-series-id") || "").trim();
+      if (seriesId === "residual-total") {
+        state.plotResidualSelected = Boolean(cb.checked);
+        state.chartSeriesCache = new Map();
+        renderPivot();
+        return;
+      }
       const line = Number(cb.getAttribute("data-line"));
       if (!Number.isFinite(line)) return;
       const targets = getPlotToggleTargets(state.model, line, { includeSelf: true });
