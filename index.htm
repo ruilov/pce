@@ -214,11 +214,34 @@
       border-radius: 6px;
     }
     .tree-spacer { display: inline-block; width: 22px; }
-    .set-parent-btn {
-      padding: 2px 8px;
-      font-size: 11px;
-      line-height: 1.4;
-      border-radius: 999px;
+    .component-focus-line {
+      border: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 12px;
+      padding: 0;
+      margin: 0;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .component-focus-line:hover:not(:disabled) {
+      background: transparent;
+      border-color: transparent;
+      color: var(--accent-2);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .component-focus-line:focus-visible {
+      outline: none;
+      background: transparent;
+      box-shadow: 0 0 0 2px rgba(94, 161, 255, 0.28);
+    }
+    .component-focus-line:disabled {
+      cursor: default;
+      opacity: 0.75;
+      text-decoration: none;
     }
     .plot-select {
       margin: 0;
@@ -2292,24 +2315,6 @@
           },
         },
         {
-          title: "Focus",
-          field: "focus",
-          width: 82,
-          widthGrow: 0,
-          widthShrink: 0,
-          hozAlign: "center",
-          headerSort: false,
-          formatter: (cell) => {
-            const data = cell.getData();
-            if (data.rowType !== "component") return "";
-            const text = data.isActiveParent ? "Focused" : "Focus";
-            const action = data.isActiveParent
-              ? `Currently focused on ${data.componentLabel || ""}`
-              : `Focus on ${data.componentLabel || ""}`;
-            return `<button type="button" class="set-parent-btn set-parent-line" data-line="${data.line}" ${data.isActiveParent ? "disabled" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}">${text}</button>`;
-          },
-        },
-        {
           title: "Plot",
           field: "plot",
           width: 62,
@@ -2335,8 +2340,15 @@
           formatter: (cell) => {
             const data = cell.getData();
             const indentPx = Math.max(0, Number(data.depth || 0) * 16);
-            const secondaryClass = (data.rowType === "component") ? "" : " quant-row-secondary";
-            return `<div class="quant-node-label${secondaryClass}" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">${escapeHtml(data.componentLabel || "")}</div>`;
+            if (data.rowType === "component") {
+              const action = data.isActiveParent
+                ? `Focused: ${data.componentLabel || ""}`
+                : `Focus on ${data.componentLabel || ""}`;
+              return `<div class="quant-node-label" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">
+                <button type="button" class="component-focus-line" data-line="${data.line}" ${data.isActiveParent ? "disabled" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}">${escapeHtml(data.componentLabel || "")}</button>
+              </div>`;
+            }
+            return `<div class="quant-node-label quant-row-secondary" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">${escapeHtml(data.componentLabel || "")}</div>`;
           },
         },
       ];
@@ -3295,9 +3307,9 @@
       clearLegendDragState();
     });
     outEl.addEventListener("click", (ev) => {
-      const setParentBtn = ev.target.closest("button.set-parent-line");
-      if (setParentBtn && state.model) {
-        const line = Number(setParentBtn.getAttribute("data-line"));
+      const focusLineBtn = ev.target.closest("button.component-focus-line");
+      if (focusLineBtn && state.model) {
+        const line = Number(focusLineBtn.getAttribute("data-line"));
         if (!Number.isFinite(line)) return;
         setActiveParentLine(line, state.model);
         return;
