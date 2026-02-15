@@ -1499,25 +1499,33 @@
 
     function buildCoreOfficialComparatorMap(model) {
       const out = new Map();
-      if (model.metaByLine.has(model.rootLine)) {
+      const hasSeries = (nominalCode, priceCode) => {
+        const n = String(nominalCode || "").trim();
+        const p = String(priceCode || "").trim();
+        return Boolean(n && p && model.nominalBySeries.has(n) && model.priceBySeries.has(p));
+      };
+
+      if (model.metaByLine.has(model.rootLine) && model.priceBySeries.has("DPCCRG")) {
         out.set(model.rootLine, {
           kind: "direct_series",
           seriesCode: "DPCCRG",
           label: "Core PCE (DPCCRG)",
         });
       }
-      if (model.metaByLine.has(70) && model.metaByLine.has(118)) {
-        out.set(70, {
-          kind: "direct_line",
-          line: 118,
-          label: "Other nondurable goods (line 118)",
+      if (model.metaByLine.has(2) && hasSeries("LA000062", "IA000062")) {
+        out.set(2, {
+          kind: "direct_series",
+          nominalSeriesCode: "LA000062",
+          priceSeriesCode: "IA000062",
+          label: "PCE goods excluding food and energy (LA000062/IA000062)",
         });
       }
-      if (model.metaByLine.has(161) && model.metaByLine.has(162)) {
-        out.set(161, {
-          kind: "direct_line",
-          line: 162,
-          label: "Water supply and sanitation (line 162)",
+      if (model.metaByLine.has(148) && hasSeries("LA000063", "IA000063")) {
+        out.set(148, {
+          kind: "direct_series",
+          nominalSeriesCode: "LA000063",
+          priceSeriesCode: "IA000063",
+          label: "PCE services excluding energy (LA000063/IA000063)",
         });
       }
       return out;
@@ -1570,7 +1578,16 @@
 
       let out = null;
       if (spec.kind === "direct_series") {
-        const dln = getSeriesDlnByCode(model.priceBySeries, spec.seriesCode, tp);
+        let dln = null;
+        if (spec.seriesCode) {
+          dln = getSeriesDlnByCode(model.priceBySeries, spec.seriesCode, tp);
+        } else if (spec.priceSeriesCode && spec.nominalSeriesCode) {
+          const hasNominal = model.nominalBySeries.has(String(spec.nominalSeriesCode));
+          const hasPrice = model.priceBySeries.has(String(spec.priceSeriesCode));
+          if (hasNominal && hasPrice) {
+            dln = getSeriesDlnByCode(model.priceBySeries, spec.priceSeriesCode, tp);
+          }
+        }
         out = dln === null ? null : (100 * dln);
       } else if (spec.kind === "direct_line" && Number.isFinite(spec.line) && model.metaByLine.has(spec.line)) {
         const cmpLine = Number(spec.line);
@@ -1799,7 +1816,7 @@
         const meta = model.metaByLine.get(line);
         if (!meta) return;
         out.push({ type: "component", line, depth, meta });
-        if (coreContrib && isCoreDeltaEligibleLine(model, line, activeParentLine)) {
+        if (coreContrib && state.expanded.has(line) && isCoreDeltaEligibleLine(model, line, activeParentLine)) {
           out.push({
             type: "core_delta",
             line,
