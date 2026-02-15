@@ -248,6 +248,28 @@
       color: #e6eefc;
     }
     .quant-row-secondary .quant-node-label { color: var(--text-2); }
+    .mobile-portrait-table .quant-node-label {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+      gap: 4px;
+    }
+    .mobile-portrait-table .tree-toggle,
+    .mobile-portrait-table .tree-spacer {
+      flex: 0 0 22px;
+    }
+    .mobile-portrait-table .component-focus-line {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mobile-portrait-table .quant-node-label.quant-row-secondary {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .tree-toggle {
       width: 22px;
       height: 22px;
@@ -566,6 +588,8 @@
       chartHostEl: null,
       legendHostEl: null,
       chartWrapEl: null,
+      tableMobilePortrait: false,
+      tableLayoutWatcherBound: false,
       chartResizeBound: false,
       dragSeriesId: null,
       dragOverSeriesId: null,
@@ -750,6 +774,34 @@
       const startYM = subtractMonthsFromYm(endYM, yearsBack * 12);
       if (!startYM) return null;
       return { startYM, endYM };
+    }
+
+    function isMobilePortraitTableLayout() {
+      if (typeof window === "undefined") return false;
+      let smallWidth = Number(window.innerWidth) <= 760;
+      let portrait = Number(window.innerHeight) >= Number(window.innerWidth);
+      try {
+        if (typeof window.matchMedia === "function") {
+          smallWidth = window.matchMedia("(max-width: 760px)").matches;
+          portrait = window.matchMedia("(orientation: portrait)").matches;
+        }
+      } catch (_) {}
+      return Boolean(smallWidth && portrait);
+    }
+
+    function handleTableLayoutViewportChange() {
+      const nextMobilePortrait = isMobilePortraitTableLayout();
+      if (state.tableMobilePortrait === nextMobilePortrait) return;
+      state.tableMobilePortrait = nextMobilePortrait;
+      state.tableColumnsSignature = "";
+      if (state.model) renderPivot();
+    }
+
+    function bindTableLayoutViewportWatcher() {
+      if (state.tableLayoutWatcherBound || typeof window === "undefined") return;
+      state.tableLayoutWatcherBound = true;
+      window.addEventListener("resize", handleTableLayoutViewportChange);
+      window.addEventListener("orientationchange", handleTableLayoutViewportChange);
     }
 
     function makeTimePeriod(y, mo) {
@@ -2690,14 +2742,19 @@
       return Math.max(78, Math.min(118, rawWidth));
     }
 
-    function buildTableColumnsForTabulator(periodBuckets, metricKey) {
+    function buildTableColumnsForTabulator(periodBuckets, metricKey, mobilePortrait = false) {
       const numericWidth = computeNumericColumnWidth(periodBuckets);
       const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
+      const plotColWidth = mobilePortrait ? 50 : 62;
+      const componentColWidth = mobilePortrait ? 180 : 280;
+      const indentStepPx = mobilePortrait ? 10 : 16;
       const staticCols = [
         {
           title: "Plot",
           field: "plot",
-          width: 62,
+          width: plotColWidth,
+          minWidth: plotColWidth,
+          maxWidth: plotColWidth,
           frozen: true,
           widthGrow: 0,
           widthShrink: 0,
@@ -2718,14 +2775,22 @@
         {
           title: `<div class="component-header-wrap"><button type="button" class="header-up-parent-btn" aria-label="Up one level" title="Up one level">&#8593;</button><span>Component</span></div>`,
           field: "componentLabel",
-          minWidth: 280,
-          frozen: true,
+          ...(mobilePortrait
+            ? {
+                width: componentColWidth,
+                minWidth: componentColWidth,
+                maxWidth: componentColWidth,
+              }
+            : {
+                minWidth: componentColWidth,
+              }),
+          frozen: !mobilePortrait,
           widthGrow: 0,
-          widthShrink: 1,
+          widthShrink: mobilePortrait ? 0 : 1,
           headerSort: false,
           formatter: (cell) => {
             const data = cell.getData();
-            const indentPx = Math.max(0, Number(data.depth || 0) * 16);
+            const indentPx = Math.max(0, Number(data.depth || 0) * indentStepPx);
             if (data.rowType === "component") {
               const action = data.isActiveParent
                 ? `Focused: ${data.componentLabel || ""}`
@@ -2848,8 +2913,11 @@
         return;
       }
 
+      const mobilePortrait = isMobilePortraitTableLayout();
+      state.tableMobilePortrait = mobilePortrait;
+      state.tableHostEl.classList.toggle("mobile-portrait-table", mobilePortrait);
       const rows = buildTableRowsForTabulator(visibleRows, model, periodBuckets, metricKey, activeParentLine);
-      const signature = `${metricKey}|${periodBuckets.map((b) => b.id).join("|")}`;
+      const signature = `${metricKey}|${periodBuckets.map((b) => b.id).join("|")}|mobilePortrait:${mobilePortrait ? 1 : 0}`;
       const needsRecreate = !state.tableInstance || state.tableColumnsSignature !== signature;
       if (needsRecreate) {
         if (state.tableInstance) {
@@ -2857,7 +2925,7 @@
         }
         state.tableInstance = new Tabulator(state.tableHostEl, {
           data: rows,
-          columns: buildTableColumnsForTabulator(periodBuckets, metricKey),
+          columns: buildTableColumnsForTabulator(periodBuckets, metricKey, mobilePortrait),
           layout: "fitData",
           index: "rowKey",
           placeholder: "No data for current selection",
@@ -3583,6 +3651,8 @@
     columnsEl.value = DEFAULT_COLUMN_MODE;
     coreModeEl.value = state.coreMode;
     updateCompareControlsVisibility();
+    bindTableLayoutViewportWatcher();
+    state.tableMobilePortrait = isMobilePortraitTableLayout();
 
     metricEl.addEventListener("change", () => {
       if (state.model) renderPivot();
