@@ -1640,6 +1640,7 @@
       if (!model || !model.metaByLine.has(line)) return false;
       if (!isCoreEnabled()) return true;
       const activeParentLine = getActiveParentLine(model);
+      if (line === activeParentLine && getCoreComparatorSpec(line)) return true;
       return !needsCoreReconstructionForLine(model, line, activeParentLine);
     }
 
@@ -1875,6 +1876,24 @@
       return out;
     }
 
+    function computeCoreTopContributionValue(model, line, tp, activeParentLine) {
+      if (!isCoreContribContext("contrib_pp")) {
+        return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+      }
+      if (line !== activeParentLine) {
+        return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+      }
+      const spec = getCoreComparatorSpec(line);
+      if (!spec) {
+        return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+      }
+      const official = computeOfficialComparableContribution(model, line, tp);
+      if (official !== null && official !== undefined && !Number.isNaN(official)) {
+        return official;
+      }
+      return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+    }
+
     function setActiveParentLine(line, model) {
       if (!model || !model.metaByLine.has(line)) return;
       if (isExcludedInCore(line, model)) return;
@@ -1932,6 +1951,9 @@
       if (metricKey === "contrib_pp") {
         const activeParentLine = getActiveParentLine(model);
         if (isCoreEnabled()) {
+          if (line === activeParentLine) {
+            return computeCoreTopContributionValue(model, line, tp, activeParentLine);
+          }
           return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
         }
         if (line === activeParentLine) {
@@ -2054,27 +2076,14 @@
     function buildVisibleRows(model, metricKey) {
       const out = [];
       const activeParentLine = getActiveParentLine(model);
-      const coreContrib = isCoreContribContext(metricKey);
       const walk = (line, depth) => {
         if (isExcludedInCore(line, model)) return;
         const meta = model.metaByLine.get(line);
         if (!meta) return;
         out.push({ type: "component", line, depth, meta });
-        const showCoreDelta = coreContrib
-          && line === activeParentLine
-          && state.expanded.has(line)
-          && isCoreDeltaEligibleLine(model, line, activeParentLine);
         if (!state.expanded.has(line)) return;
         const children = getIncludedChildren(model, line);
         for (const child of children) walk(child, depth + 1);
-        if (showCoreDelta) {
-          out.push({
-            type: "core_delta",
-            line,
-            depth: depth + 1,
-            label: "Delta vs official",
-          });
-        }
       };
       walk(activeParentLine, 0);
       return out;
@@ -2669,13 +2678,6 @@
           for (let b = 0; b < periodBuckets.length; b++) {
             const field = getBucketFieldKey(b);
             base[field] = computeBucketMetricValue(metricKey, row.line, periodBuckets[b], model);
-          }
-        } else if (row.type === "core_delta") {
-          base.componentLabel = String(row.label || "Delta vs official");
-          base.titleText = base.componentLabel;
-          for (let b = 0; b < periodBuckets.length; b++) {
-            const field = getBucketFieldKey(b);
-            base[field] = computeCoreDeltaBucketValue(row.line, periodBuckets[b], model);
           }
         }
 
