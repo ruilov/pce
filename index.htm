@@ -1044,6 +1044,7 @@
         dlnCache: new Map(),
         avgWeightCache: new Map(),
         currentWeightCache: new Map(),
+        basisWeightCache: new Map(),
         coreAdjustedNominalCache: new Map(),
         reconstructedCoreContributionCache: new Map(),
         officialComparableContributionCache: new Map(),
@@ -1338,6 +1339,45 @@
       return getAverageWeight(model, line, parentLine, tp);
     }
 
+    function computeSignedWeightToBasis(model, line, basisParentLine, tp) {
+      const key = `${line}|${basisParentLine}|${tp}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.basisWeightCache.has(key)) return model.basisWeightCache.get(key);
+
+      if (!model.metaByLine.has(line) || !model.metaByLine.has(basisParentLine)) {
+        model.basisWeightCache.set(key, null);
+        return null;
+      }
+      if (line === basisParentLine) {
+        model.basisWeightCache.set(key, 100);
+        return 100;
+      }
+      if (!isDescendantOrSelf(model, line, basisParentLine)) {
+        model.basisWeightCache.set(key, null);
+        return null;
+      }
+
+      const childNom = isCoreEnabled()
+        ? getCoreAdjustedNominal(model, line, tp)
+        : getNominalLevelValue(model, line, tp);
+      const basisNom = isCoreEnabled()
+        ? getCoreAdjustedNominal(model, basisParentLine, tp)
+        : getNominalLevelValue(model, basisParentLine, tp);
+      if (childNom === null || basisNom === null || Number.isNaN(childNom) || Number.isNaN(basisNom) || !(basisNom > 0)) {
+        model.basisWeightCache.set(key, null);
+        return null;
+      }
+
+      const pathSign = getPathSignToAncestor(model, line, basisParentLine);
+      if (pathSign === null) {
+        model.basisWeightCache.set(key, null);
+        return null;
+      }
+
+      const out = 100 * (childNom / basisNom) * pathSign;
+      model.basisWeightCache.set(key, out);
+      return out;
+    }
+
     function getSeriesDlnByCode(seriesByCode, seriesCode, tp) {
       const prevTp = prevTimePeriod(tp);
       if (!prevTp) return null;
@@ -1623,13 +1663,9 @@
         return dln === null ? null : (100 * dln);
       }
 
-      const parentLine = meta.parent;
-      const hasParent = parentLine !== null && model.metaByLine.has(parentLine);
-
       if (metricKey === "weight_pct") {
-        if (!hasParent) return 100;
-        const w = getCurrentWeight(model, line, parentLine, tp);
-        return w === null ? null : (100 * w);
+        const activeParentLine = getActiveParentLine(model);
+        return computeSignedWeightToBasis(model, line, activeParentLine, tp);
       }
 
       if (metricKey === "contrib_pp") {
@@ -3029,7 +3065,7 @@
       if (compareMode) {
         option = buildCompareDumbbellOption(legendSeries, metricKey, buckets);
       } else if (columnMode === "period" && buckets.length === 1) {
-        if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], legendSeries, metricKey);
+        if (metricKey === "weight_pct") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
         else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
       } else {
         option = buildStackedBarOption(buckets, plotSeries, metricKey);
