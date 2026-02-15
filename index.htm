@@ -2144,8 +2144,6 @@
       const frontierLines = buildRootFrontierLines(model, effectiveExpandedSet);
       const plotStateCache = new Map();
       const splitMemo = new Map();
-      const deselectedSums = new Array(periodBuckets.length).fill(0);
-      const deselectedHas = new Array(periodBuckets.length).fill(false);
       for (const line of frontierLines) {
         const meta = model.metaByLine.get(line);
         if (!meta) continue;
@@ -2154,10 +2152,6 @@
           const bucket = periodBuckets[i];
           const split = computePlotSplitForLine(model, line, metricKey, bucket, plotStateCache, splitMemo, selectionSig);
           values.push(split.selected);
-          const d = split.deselected;
-          if (d === null || d === undefined || Number.isNaN(d)) continue;
-          deselectedHas[i] = true;
-          deselectedSums[i] += d;
         }
 
         if (!values.some((v) => v !== null)) continue;
@@ -2185,17 +2179,9 @@
       }
 
       const residualValues = periodBuckets.map((_, i) => {
-        let sum = 0;
-        let hasAny = false;
-        if (deselectedHas[i]) {
-          hasAny = true;
-          sum += deselectedSums[i];
-        }
-        if (metricKey === "contrib_pp" && openResidualHas[i]) {
-          hasAny = true;
-          sum += openResidualSums[i];
-        }
-        return hasAny ? sum : null;
+        if (metricKey !== "contrib_pp") return null;
+        if (!openResidualHas[i]) return null;
+        return openResidualSums[i];
       });
       if (residualValues.some((v) => v !== null)) {
         series.push({
