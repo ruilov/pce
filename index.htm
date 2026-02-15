@@ -941,11 +941,185 @@
       return out;
     }
 
+    // Memory-efficient CSV row iterator for large files.
+    function forEachCsvRow(text, onRow) {
+      let row = [];
+      let field = "";
+      let i = 0;
+      let inQuotes = false;
+
+      function endField() {
+        row.push(field);
+        field = "";
+      }
+      function emitRow() {
+        onRow(row);
+        row = [];
+      }
+
+      while (i < text.length) {
+        const c = text[i];
+
+        if (inQuotes) {
+          if (c === '"') {
+            const next = text[i + 1];
+            if (next === '"') {
+              field += '"';
+              i += 2;
+              continue;
+            }
+            inQuotes = false;
+            i += 1;
+            continue;
+          }
+          field += c;
+          i += 1;
+          continue;
+        }
+
+        if (c === '"') {
+          inQuotes = true;
+          i += 1;
+          continue;
+        }
+        if (c === ",") {
+          endField();
+          i += 1;
+          continue;
+        }
+        if (c === "\r") {
+          i += 1;
+          continue;
+        }
+        if (c === "\n") {
+          endField();
+          emitRow();
+          i += 1;
+          continue;
+        }
+        field += c;
+        i += 1;
+      }
+
+      endField();
+      if (row.length > 1 || row[0] !== "") emitRow();
+    }
+
+    function createSeriesByCodeRowConsumer() {
+      const out = new Map();
+      let headerSeen = false;
+      let idxSeries = -1;
+      let idxTp = -1;
+      let idxData = -1;
+      function consumeRow(row) {
+        if (!headerSeen) {
+          headerSeen = true;
+          const headerIndex = new Map();
+          for (let i = 0; i < row.length; i++) {
+            const headerName = String(row[i] || "").replace(/^\uFEFF/, "").trim();
+            headerIndex.set(headerName, i);
+          }
+          idxSeries = headerIndex.has("SeriesCode") ? headerIndex.get("SeriesCode") : -1;
+          idxTp = headerIndex.has("TimePeriod") ? headerIndex.get("TimePeriod") : -1;
+          idxData = headerIndex.has("DataValue") ? headerIndex.get("DataValue") : -1;
+          return;
+        }
+        if (idxSeries < 0 || idxTp < 0 || idxData < 0) return;
+
+        const seriesCode = String(row[idxSeries] || "").trim();
+        if (!seriesCode) return;
+        const tp = String(row[idxTp] || "").trim();
+        if (!tp) return;
+        const v = parseBeaNumber(row[idxData]);
+        if (v === null) return;
+
+        let byTp = out.get(seriesCode);
+        if (!byTp) {
+          byTp = new Map();
+          out.set(seriesCode, byTp);
+        }
+        if (!byTp.has(tp)) byTp.set(tp, v);
+      }
+      return { out, consumeRow };
+    }
+
+    function buildSeriesByCodeFromCsvText(text) {
+      const { out, consumeRow } = createSeriesByCodeRowConsumer();
+      forEachCsvRow(text, consumeRow);
+      return out;
+    }
+
+    async function buildSeriesByCodeFromCsvResponse(resp) {
+      if (!resp || !resp.body || typeof resp.body.getReader !== "function" || typeof TextDecoder === "undefined") {
+        return buildSeriesByCodeFromCsvText(await resp.text());
+      }
+
+      const { out, consumeRow } = createSeriesByCodeRowConsumer();
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let row = [];
+      let field = "";
+      let inQuotes = false;
+
+      const endField = () => {
+        row.push(field);
+        field = "";
+      };
+      const emitRow = () => {
+        consumeRow(row);
+        row = [];
+      };
+      const processChunk = (chunkText) => {
+        for (let i = 0; i < chunkText.length; i++) {
+          const c = chunkText[i];
+          if (inQuotes) {
+            if (c === "\"") {
+              const next = chunkText[i + 1];
+              if (next === "\"") {
+                field += "\"";
+                i += 1;
+              } else {
+                inQuotes = false;
+              }
+            } else {
+              field += c;
+            }
+            continue;
+          }
+          if (c === "\"") {
+            inQuotes = true;
+            continue;
+          }
+          if (c === ",") {
+            endField();
+            continue;
+          }
+          if (c === "\r") continue;
+          if (c === "\n") {
+            endField();
+            emitRow();
+            continue;
+          }
+          field += c;
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        processChunk(decoder.decode(value, { stream: true }));
+      }
+      processChunk(decoder.decode());
+      endField();
+      if (row.length > 1 || row[0] !== "") emitRow();
+      return out;
+    }
+
     function toAbsoluteUrl(path) {
       return new URL(path, window.location.href).href;
     }
 
-    async function fetchCsvText(url, options = {}) {
+    async function fetchCsvResponse(url, options = {}) {
       const fetchOptions = {};
       if (options.fetchCacheMode) fetchOptions.cache = options.fetchCacheMode;
 
@@ -959,6 +1133,11 @@
       if (!resp.ok) {
         throw new Error(`Failed to load ${resp.url || url} (HTTP ${resp.status})`);
       }
+      return resp;
+    }
+
+    async function fetchCsvText(url, options = {}) {
+      const resp = await fetchCsvResponse(url, options);
       return resp.text();
     }
 
@@ -971,6 +1150,19 @@
       const rows = parseCsv(text);
       if (useMemoryCache) csvRowsCache.set(url, rows);
       return rows;
+    }
+
+    async function loadSeriesByCodeCsv(url, { useMemoryCache = false, fetchCacheMode = undefined } = {}) {
+      const cacheKey = `series:${url}`;
+      if (useMemoryCache && csvRowsCache.has(cacheKey)) {
+        return csvRowsCache.get(cacheKey);
+      }
+
+      const resp = await fetchCsvResponse(url, { fetchCacheMode });
+      const seriesByCode = await buildSeriesByCodeFromCsvResponse(resp);
+
+      if (useMemoryCache) csvRowsCache.set(cacheKey, seriesByCode);
+      return seriesByCode;
     }
 
     function buildHierarchyModel(hierarchyRows) {
@@ -3283,19 +3475,20 @@
         const useMemoryCache = DATA_LOAD_CONFIG.ENABLE_IN_MEMORY_CACHE;
         const fetchCacheMode = useMemoryCache ? undefined : DATA_LOAD_CONFIG.FETCH_CACHE_MODE_WHEN_OFF;
 
-        const [priceRows, nominalRows, hierarchyRows] = await Promise.all([
-          loadCsv(priceUrl, { useMemoryCache, fetchCacheMode }),
-          loadCsv(nominalUrl, { useMemoryCache, fetchCacheMode }),
-          loadCsv(hierarchyUrl, { useMemoryCache, fetchCacheMode }),
-        ]);
+        setStatus("Loading price data...");
+        const priceBySeries = await loadSeriesByCodeCsv(priceUrl, { useMemoryCache, fetchCacheMode });
+        setStatus("Loading nominal data...");
+        const nominalBySeries = await loadSeriesByCodeCsv(nominalUrl, { useMemoryCache, fetchCacheMode });
+        setStatus("Loading hierarchy...");
+        const hierarchyRows = await loadCsv(hierarchyUrl, { useMemoryCache, fetchCacheMode });
 
         if (!hierarchyRows.length) {
           throw new Error(`Hierarchy file has no rows: ${hierarchyUrl}`);
         }
 
         const model = buildHierarchyModel(hierarchyRows);
-        model.priceBySeries = buildSeriesByCode(priceRows);
-        model.nominalBySeries = buildSeriesByCode(nominalRows);
+        model.priceBySeries = priceBySeries;
+        model.nominalBySeries = nominalBySeries;
         resolveNodeSeriesCodes(model);
         const coreResolved = resolveCoreExclusions(model);
         state.coreExclusionRoots = coreResolved.roots;
