@@ -3207,16 +3207,30 @@
     function applyPlotCheckboxIndeterminateStates() {
       if (!state.tableHostEl) return;
       const checkboxes = state.tableHostEl.querySelectorAll("input.plot-select[data-indeterminate]");
+      let total = 0;
+      let mixed = 0;
       for (const cb of checkboxes) {
-        cb.indeterminate = cb.getAttribute("data-indeterminate") === "1";
+        total += 1;
+        const isMixed = cb.getAttribute("data-indeterminate") === "1";
+        cb.indeterminate = isMixed;
+        if (isMixed) mixed += 1;
       }
+      // Debug guard values for quick inspection while keeping runtime quiet.
+      void total;
+      void mixed;
     }
 
     function scheduleApplyPlotCheckboxIndeterminateStates() {
       if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-        window.requestAnimationFrame(() => applyPlotCheckboxIndeterminateStates());
+        window.requestAnimationFrame(() => {
+          applyPlotCheckboxIndeterminateStates();
+          setTimeout(applyPlotCheckboxIndeterminateStates, 0);
+        });
       } else {
-        setTimeout(applyPlotCheckboxIndeterminateStates, 0);
+        setTimeout(() => {
+          applyPlotCheckboxIndeterminateStates();
+          setTimeout(applyPlotCheckboxIndeterminateStates, 0);
+        }, 0);
       }
     }
 
@@ -3249,6 +3263,12 @@
             const el = row.getElement();
             if (data.rowType !== "component") el.classList.add("quant-row-secondary");
             if (data.useUnchecked) el.classList.add("quant-row-unchecked");
+          },
+          dataProcessed: () => {
+            scheduleApplyPlotCheckboxIndeterminateStates();
+          },
+          renderComplete: () => {
+            scheduleApplyPlotCheckboxIndeterminateStates();
           },
         });
         state.tableColumnsSignature = signature;
