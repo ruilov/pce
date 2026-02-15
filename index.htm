@@ -2959,7 +2959,8 @@
           base.plotSelectable = row.line !== model.rootLine;
           if (base.plotSelectable) {
             const plotState = getPlotSelectionStateForLine(model, row.line, plotStateCache);
-            base.plotSelected = plotState === "checked";
+            // UI semantics: checked means excluded.
+            base.plotSelected = plotState === "unchecked";
             base.plotIndeterminate = plotState === "indeterminate";
             base.useUnchecked = metricKey === "contrib_pp" && plotState === "unchecked";
           }
@@ -3001,7 +3002,8 @@
             isExpanded: false,
             isActiveParent: false,
             plotSelectable: true,
-            plotSelected: state.plotResidualSelected,
+            // UI semantics: checked means excluded/hidden.
+            plotSelected: !state.plotResidualSelected,
             plotIndeterminate: false,
             componentLabel: "Residual",
             titleText: "Residual",
@@ -3058,12 +3060,12 @@
     function buildTableColumnsForTabulator(periodBuckets, metricKey, model, mobilePortrait = false) {
       const numericWidth = computeNumericColumnWidth(periodBuckets);
       const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
-      const plotColWidth = mobilePortrait ? 50 : 62;
+      const plotColWidth = mobilePortrait ? 54 : 66;
       const componentColWidth = mobilePortrait ? 180 : 280;
       const indentStepPx = mobilePortrait ? 10 : 16;
       const staticCols = [
         {
-          title: "Use",
+          title: "Exclude",
           field: "plot",
           width: plotColWidth,
           minWidth: plotColWidth,
@@ -3077,10 +3079,10 @@
             const data = cell.getData();
             if (!data.plotSelectable) return "";
             const action = data.rowType === "residual_total"
-              ? `Include ${data.componentLabel || ""} in chart`
+              ? `Exclude ${data.componentLabel || ""} from chart`
               : (metricKey === "contrib_pp"
-                ? `Use ${data.componentLabel || ""} in calculation`
-                : `Include ${data.componentLabel || ""} in chart`);
+                ? `Exclude ${data.componentLabel || ""} from calculation`
+                : `Exclude ${data.componentLabel || ""} from chart`);
             if (data.rowType === "residual_total") {
               return `<input type="checkbox" class="plot-select" data-series-id="residual-total" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
             }
@@ -4031,7 +4033,7 @@
       if (!cb || !state.model) return;
       const seriesId = String(cb.getAttribute("data-series-id") || "").trim();
       if (seriesId === "residual-total") {
-        state.plotResidualSelected = Boolean(cb.checked);
+        state.plotResidualSelected = !Boolean(cb.checked);
         state.chartSeriesCache = new Map();
         renderPivot();
         return;
@@ -4040,7 +4042,7 @@
       if (!Number.isFinite(line)) return;
       const targets = getPlotToggleTargets(state.model, line, { includeSelf: true });
       for (const targetLine of targets) {
-        setLineSelectedForPlot(targetLine, cb.checked);
+        setLineSelectedForPlot(targetLine, !cb.checked);
       }
       state.chartSeriesCache = new Map();
       renderPivot();
