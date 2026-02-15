@@ -1607,6 +1607,23 @@
       return out;
     }
 
+    function getVisibleResidualParentLines(model, visibleRows, metricKey) {
+      const out = [];
+      const seen = new Set();
+      for (const row of visibleRows || []) {
+        if (!row || row.type !== "component") continue;
+        const line = Number(row.line);
+        if (!Number.isFinite(line) || seen.has(line)) continue;
+        if (!state.expanded.has(line)) continue;
+        const children = getIncludedChildren(model, line);
+        if (!children.length) continue;
+        if (!shouldShowResidualForLine(model, line, metricKey)) continue;
+        seen.add(line);
+        out.push(line);
+      }
+      return out;
+    }
+
     function buildVisibleRows(model, metricKey) {
       const out = [];
       const activeParentLine = getActiveParentLine(model);
@@ -1627,16 +1644,6 @@
         if (!state.expanded.has(line)) return;
         const children = getIncludedChildren(model, line);
         for (const child of children) walk(child, depth + 1);
-        if (children.length > 0 && shouldShowResidualForLine(model, line, metricKey)) {
-          const parentMeta = model.metaByLine.get(line);
-          const parentDesc = parentMeta && parentMeta.desc ? parentMeta.desc : `line ${line}`;
-          out.push({
-            type: "residual",
-            parentLine: line,
-            depth: depth + 1,
-            label: `Residual (${parentDesc})`,
-          });
-        }
       };
       walk(activeParentLine, 0);
       return out;
@@ -2145,6 +2152,17 @@
       const monthsA = bucketA && Array.isArray(bucketA.months) ? bucketA.months.length : 0;
       const monthsB = bucketB && Array.isArray(bucketB.months) ? bucketB.months.length : 0;
       const plotStateCache = new Map();
+      const applyCompareDelta = (baseRow) => {
+        if (!compareMode) return;
+        const rawA = baseRow[getBucketFieldKey(0)];
+        const rawB = baseRow[getBucketFieldKey(1)];
+        const displayedA = getDisplayedMetricValue(metricKey, rawA, monthsA);
+        const displayedB = getDisplayedMetricValue(metricKey, rawB, monthsB);
+        baseRow.compareDelta = (Number.isFinite(displayedA) && Number.isFinite(displayedB))
+          ? (displayedB - displayedA)
+          : null;
+      };
+
       for (let i = 0; i < visibleRows.length; i++) {
         const row = visibleRows[i];
         const base = {
@@ -2181,13 +2199,6 @@
             const field = getBucketFieldKey(b);
             base[field] = computeBucketMetricValue(metricKey, row.line, periodBuckets[b], model);
           }
-        } else if (row.type === "residual") {
-          base.componentLabel = String(row.label || "Residual");
-          base.titleText = base.componentLabel;
-          for (let b = 0; b < periodBuckets.length; b++) {
-            const field = getBucketFieldKey(b);
-            base[field] = computeResidualBucketValue(row.parentLine, periodBuckets[b], model);
-          }
         } else if (row.type === "core_delta") {
           base.componentLabel = String(row.label || "Delta vs official");
           base.titleText = base.componentLabel;
@@ -2197,18 +2208,38 @@
           }
         }
 
-        if (compareMode) {
-          const rawA = base[getBucketFieldKey(0)];
-          const rawB = base[getBucketFieldKey(1)];
-          const displayedA = getDisplayedMetricValue(metricKey, rawA, monthsA);
-          const displayedB = getDisplayedMetricValue(metricKey, rawB, monthsB);
-          base.compareDelta = (Number.isFinite(displayedA) && Number.isFinite(displayedB))
-            ? (displayedB - displayedA)
-            : null;
-        }
+        applyCompareDelta(base);
 
         rows.push(base);
       }
+
+      if (metricKey === "contrib_pp") {
+        const residualParents = getVisibleResidualParentLines(model, visibleRows, metricKey);
+        if (residualParents.length > 0) {
+          const residualRow = {
+            rowKey: `residual_total:ap:${activeParentLine}:b:${periodBuckets.length}`,
+            rowType: "residual_total",
+            line: null,
+            depth: 0,
+            hasChildren: false,
+            isExpanded: false,
+            isActiveParent: false,
+            plotSelectable: false,
+            plotSelected: false,
+            plotIndeterminate: false,
+            componentLabel: "Residual",
+            titleText: "Residual",
+          };
+          for (let b = 0; b < periodBuckets.length; b++) {
+            const field = getBucketFieldKey(b);
+            const values = residualParents.map((parentLine) => computeResidualBucketValue(parentLine, periodBuckets[b], model));
+            residualRow[field] = sumNonNull(values);
+          }
+          applyCompareDelta(residualRow);
+          rows.push(residualRow);
+        }
+      }
+
       return rows;
     }
 
