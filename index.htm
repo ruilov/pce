@@ -243,6 +243,40 @@
       opacity: 0.75;
       text-decoration: none;
     }
+    .component-header-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .header-up-parent-btn {
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      min-height: 18px;
+      padding: 0;
+      border-radius: 4px;
+      border: 1px solid var(--table-header-border);
+      background: rgba(18, 33, 52, 0.85);
+      color: var(--text-1);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 16px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .header-up-parent-btn:hover:not(:disabled) {
+      background: rgba(33, 65, 100, 0.92);
+      border-color: var(--accent);
+      color: #eaf3ff;
+    }
+    .header-up-parent-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(94, 161, 255, 0.26);
+    }
+    .header-up-parent-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
     .plot-select {
       margin: 0;
       width: 14px;
@@ -374,7 +408,6 @@
         <option value="core">Core</option>
       </select>
     </label>
-    <button id="resetParent" disabled>Reset to PCE</button>
   </div>
 
   <div class="row compare-controls" id="compareControls" hidden>
@@ -434,7 +467,6 @@
     const metricEl = document.getElementById("metric");
     const columnsEl = document.getElementById("columns");
     const coreModeEl = document.getElementById("coreMode");
-    const resetParentBtn = document.getElementById("resetParent");
     const compareControlsEl = document.getElementById("compareControls");
     const compareStartMonthEl = document.getElementById("compareStartMonth");
     const compareStartYearEl = document.getElementById("compareStartYear");
@@ -1487,6 +1519,17 @@
       renderPivot();
     }
 
+    function getImmediateParentLine(model, line) {
+      if (!model || !model.metaByLine.has(line)) return null;
+      const meta = model.metaByLine.get(line);
+      if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) return null;
+      let target = meta.parent;
+      if (isCoreEnabled() && isExcludedInCore(target, model)) {
+        target = findNearestIncludedAncestor(model, target);
+      }
+      return model.metaByLine.has(target) ? target : null;
+    }
+
     function findNearestIncludedAncestor(model, line) {
       let cur = line;
       const seen = new Set();
@@ -2315,7 +2358,7 @@
           },
         },
         {
-          title: "Component",
+          title: `<div class="component-header-wrap"><button type="button" class="header-up-parent-btn" aria-label="Up one level" title="Up one level">&#8593;</button><span>Component</span></div>`,
           field: "componentLabel",
           minWidth: 280,
           widthGrow: 0,
@@ -2988,14 +3031,31 @@
       return { startYM, endYM, months, periodBuckets, columnMode };
     }
 
-    function updateResetParentButtonState() {
-      if (!resetParentBtn) return;
+    function updateParentNavControlState() {
+      const btn = state.tableHostEl
+        ? state.tableHostEl.querySelector("button.header-up-parent-btn")
+        : null;
+      if (!btn) return;
       if (!state.model) {
-        resetParentBtn.disabled = true;
+        btn.disabled = true;
+        btn.title = "";
+        btn.setAttribute("aria-label", "Up one level");
         return;
       }
       const activeParentLine = getActiveParentLine(state.model);
-      resetParentBtn.disabled = activeParentLine === state.model.rootLine;
+      const parentLine = getImmediateParentLine(state.model, activeParentLine);
+      if (!Number.isFinite(parentLine)) {
+        btn.disabled = true;
+        btn.title = "Already at PCE";
+        btn.setAttribute("aria-label", "Already at PCE");
+        return;
+      }
+      const parentMeta = state.model.metaByLine.get(parentLine);
+      const parentLabel = parentMeta && parentMeta.desc ? String(parentMeta.desc) : `Line ${parentLine}`;
+      const text = `Up to ${parentLabel}`;
+      btn.disabled = false;
+      btn.title = text;
+      btn.setAttribute("aria-label", text);
     }
 
     function renderPivot() {
@@ -3007,7 +3067,6 @@
       const columnMode = state.columnMode;
       const visibleRows = buildVisibleRows(model, metricKey);
       ensureVisibleSelectionDefaults(visibleRows, model);
-      updateResetParentButtonState();
       ensureOutputShell();
 
       const chartSeriesRaw = buildChartSeries(model, metricKey, periodBuckets, state.expanded);
@@ -3015,6 +3074,7 @@
       const chartSeries = getOrderedSeriesTopToBottom(chartSeriesRaw);
       const stackOrderSignature = getStackOrderSignature();
       renderTableWithTabulator(visibleRows, periodBuckets, metricKey, model, activeParentLine);
+      updateParentNavControlState();
       renderChartWithECharts({
         buckets: periodBuckets,
         series: chartSeries,
@@ -3138,7 +3198,7 @@
         state.expanded = preservedExpanded;
         state.chartSeriesCache = new Map();
         renderPivot();
-        updateResetParentButtonState();
+        updateParentNavControlState();
 
         setStatus(`Loaded ${model.metaByLine.size} components.`);
       } catch (e) {
@@ -3164,10 +3224,6 @@
     coreModeEl.value = state.coreMode;
     updateCompareControlsVisibility();
 
-    resetParentBtn.addEventListener("click", () => {
-      if (!state.model) return;
-      setActiveParentLine(state.model.rootLine, state.model);
-    });
     metricEl.addEventListener("change", () => {
       if (state.model) renderPivot();
     });
@@ -3295,6 +3351,14 @@
       clearLegendDragState();
     });
     outEl.addEventListener("click", (ev) => {
+      const upBtn = ev.target.closest("button.header-up-parent-btn");
+      if (upBtn && state.model) {
+        const current = getActiveParentLine(state.model);
+        const parentLine = getImmediateParentLine(state.model, current);
+        if (!Number.isFinite(parentLine)) return;
+        setActiveParentLine(parentLine, state.model);
+        return;
+      }
       const focusLineBtn = ev.target.closest("button.component-focus-line");
       if (focusLineBtn && state.model) {
         const line = Number(focusLineBtn.getAttribute("data-line"));
