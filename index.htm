@@ -131,7 +131,7 @@
       background: linear-gradient(180deg, rgba(24, 36, 56, 0.9), rgba(16, 25, 40, 0.92));
       box-shadow: var(--shadow);
     }
-    .quant-table-panel { overflow: hidden; }
+    .quant-table-panel { overflow: auto; }
     .quant-chart-panel { padding: 12px; }
     .tabulator {
       border: none;
@@ -169,7 +169,17 @@
     .tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="desc"] {
       background: #224064 !important;
     }
+    .tabulator .tabulator-header .tabulator-col.tabulator-frozen,
+    .tabulator .tabulator-header .tabulator-col.tabulator-frozen-left,
+    .tabulator .tabulator-header .tabulator-col.tabulator-frozen-right {
+      background: #1b314f !important;
+      z-index: 30 !important;
+    }
     .tabulator .tabulator-col:last-child { border-right: none; }
+    .tabulator .tabulator-tableholder {
+      overflow-x: auto !important;
+      overflow-y: auto !important;
+    }
     .tabulator .tabulator-tableholder .tabulator-table { background: transparent; }
     .tabulator-row {
       background: transparent;
@@ -189,6 +199,41 @@
       padding: 6px 8px;
     }
     .tabulator-cell:last-child { border-right: none; }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell.tabulator-frozen-right {
+      background: #0f1827 !important;
+      z-index: 25 !important;
+      position: sticky !important;
+      opacity: 1 !important;
+    }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:nth-child(2n) .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:nth-child(2n) .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:nth-child(2n) .tabulator-cell.tabulator-frozen-right {
+      background: #141e2f !important;
+    }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover .tabulator-cell.tabulator-frozen-right,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover .tabulator-cell.tabulator-frozen-right {
+      background: #1d304b !important;
+    }
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected .tabulator-cell.tabulator-frozen-right,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover .tabulator-cell.tabulator-frozen,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover .tabulator-cell.tabulator-frozen-left,
+    .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover .tabulator-cell.tabulator-frozen-right {
+      background: #2a4467 !important;
+    }
+    .tabulator .tabulator-col.tabulator-frozen-right,
+    .tabulator .tabulator-col.tabulator-frozen-left,
+    .tabulator .tabulator-cell.tabulator-frozen-right,
+    .tabulator .tabulator-cell.tabulator-frozen-left {
+      box-shadow: 2px 0 0 rgba(20, 36, 56, 0.9), 5px 0 10px rgba(0, 0, 0, 0.18);
+    }
     .tabulator-cell.quant-cell-number {
       font-family: var(--mono);
       color: #dbe7fa;
@@ -2383,6 +2428,7 @@
           title: "Plot",
           field: "plot",
           width: 62,
+          frozen: true,
           widthGrow: 0,
           widthShrink: 0,
           hozAlign: "center",
@@ -2403,6 +2449,7 @@
           title: `<div class="component-header-wrap"><button type="button" class="header-up-parent-btn" aria-label="Up one level" title="Up one level">&#8593;</button><span>Component</span></div>`,
           field: "componentLabel",
           minWidth: 280,
+          frozen: true,
           widthGrow: 0,
           widthShrink: 1,
           headerSort: false,
@@ -2541,7 +2588,7 @@
         state.tableInstance = new Tabulator(state.tableHostEl, {
           data: rows,
           columns: buildTableColumnsForTabulator(periodBuckets, metricKey),
-          layout: "fitDataTable",
+          layout: "fitData",
           index: "rowKey",
           placeholder: "No data for current selection",
           reactiveData: false,
