@@ -1562,12 +1562,29 @@
       return out;
     }
 
-    function formatMetricValue(metricKey, value) {
-      if (value === null || value === undefined || Number.isNaN(value)) return "";
-      if (metricKey === "nominal_level") return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-      if (metricKey === "weight_pct") return value.toFixed(2);
-      if (metricKey === "price_level") return value.toFixed(3);
-      return value.toFixed(3);
+    function annualizePercentForBucket(valuePct, monthCount) {
+      if (valuePct === null || valuePct === undefined || Number.isNaN(valuePct)) return null;
+      if (!Number.isFinite(monthCount) || monthCount <= 0) return null;
+      const r = valuePct / 100;
+      const base = 1 + r;
+      if (!(base > 0)) return null;
+      const annualized = (Math.pow(base, 12 / monthCount) - 1) * 100;
+      return Number.isFinite(annualized) ? annualized : null;
+    }
+
+    function getDisplayedMetricValue(metricKey, rawValue, bucketMonthCount) {
+      if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) return null;
+      if (metricKey === "contrib_pp") return annualizePercentForBucket(rawValue, bucketMonthCount);
+      return rawValue;
+    }
+
+    function formatDisplayedMetricValue(metricKey, displayedValue) {
+      if (displayedValue === null || displayedValue === undefined || Number.isNaN(displayedValue)) return "";
+      if (metricKey === "nominal_level") return displayedValue.toLocaleString(undefined, { maximumFractionDigits: 1 });
+      if (metricKey === "weight_pct") return `${displayedValue.toFixed(2)}%`;
+      if (metricKey === "contrib_pp") return `${displayedValue.toFixed(3)}%`;
+      if (metricKey === "price_level") return displayedValue.toFixed(3);
+      return displayedValue.toFixed(3);
     }
 
     function isLineSelectedForPlot(line) {
@@ -2125,7 +2142,9 @@
         formatter: (cell) => {
           const v = cell.getValue();
           if (v === null || v === undefined || Number.isNaN(v)) return "";
-          return formatMetricValue(metricKey, v);
+          const monthCount = Array.isArray(bucket.months) ? bucket.months.length : 0;
+          const displayed = getDisplayedMetricValue(metricKey, v, monthCount);
+          return formatDisplayedMetricValue(metricKey, displayed);
         },
       }));
 
@@ -2217,36 +2236,25 @@
       return [...legendOrderedSeries].reverse();
     }
 
-    function buildLegendRankBySeriesId(legendOrderedSeries) {
-      const rank = new Map();
-      for (let i = 0; i < legendOrderedSeries.length; i++) {
-        const s = legendOrderedSeries[i];
-        if (s && s.id) rank.set(String(s.id), i);
-      }
-      return rank;
-    }
-
-    function sortTooltipParamsByLegendOrder(params, legendRankBySeriesId) {
-      const items = Array.isArray(params) ? [...params] : [];
-      return items.sort((a, b) => {
-        const aId = String((a && a.seriesId) || "");
-        const bId = String((b && b.seriesId) || "");
-        const aRank = legendRankBySeriesId.has(aId) ? legendRankBySeriesId.get(aId) : Number.POSITIVE_INFINITY;
-        const bRank = legendRankBySeriesId.has(bId) ? legendRankBySeriesId.get(bId) : Number.POSITIVE_INFINITY;
-        return aRank - bRank;
-      });
-    }
-
-    function buildStackedBarOption(buckets, series, metricKey, legendRankBySeriesId) {
+    function buildStackedBarOption(buckets, series, metricKey) {
       const categories = buckets.map((b) => b.label);
       const rotate = categories.length > 12 ? 35 : 0;
+      const displayedSeries = series.map((s) => ({
+        ...s,
+        displayedValues: s.values.map((v, idx) => {
+          const monthCount = Array.isArray(buckets[idx] && buckets[idx].months)
+            ? buckets[idx].months.length
+            : 0;
+          return getDisplayedMetricValue(metricKey, v, monthCount);
+        }),
+      }));
+
       return {
         animation: false,
         backgroundColor: "transparent",
-        color: series.map((s) => s.color),
+        color: displayedSeries.map((s) => s.color),
         tooltip: {
-          trigger: "axis",
-          axisPointer: { type: "shadow" },
+          trigger: "item",
           backgroundColor: "rgba(18, 28, 44, 0.96)",
           borderColor: "#2f4a6a",
           borderWidth: 1,
@@ -2256,14 +2264,10 @@
             fontSize: 12,
           },
           extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
-          formatter: (params) => {
-            if (!params || !params.length) return "";
-            const header = escapeHtml(String(params[0].axisValueLabel || ""));
-            const orderedParams = sortTooltipParamsByLegendOrder(params, legendRankBySeriesId);
-            const lines = orderedParams
-              .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data))
-              .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
-            return [header, ...lines].join("<br/>");
+          formatter: (p) => {
+            if (!p) return "";
+            const v = (p.data === null || p.data === undefined || Number.isNaN(p.data)) ? null : Number(p.data);
+            return `${escapeHtml(String(p.seriesName || ""))}: ${escapeHtml(formatDisplayedMetricValue(metricKey, v))}`;
           },
         },
         grid: { left: 64, right: 18, top: 14, bottom: 72 },
@@ -2279,27 +2283,32 @@
           axisLabel: {
             color: "#a9b7cb",
             fontFamily: "JetBrains Mono, monospace",
-            formatter: (v) => formatMetricValue(metricKey, Number(v)),
+            formatter: (v) => formatDisplayedMetricValue(metricKey, Number(v)),
           },
           splitLine: { lineStyle: { color: "rgba(69, 97, 135, 0.35)" } },
           axisLine: { lineStyle: { color: "#304661" } },
           axisTick: { lineStyle: { color: "#304661" } },
         },
-        series: series.map((s) => ({
+        series: displayedSeries.map((s) => ({
           id: s.id,
           name: s.label,
           type: "bar",
           stack: "total",
           barMaxWidth: 30,
           emphasis: { focus: "series" },
-          data: s.values.map((v) => (v === null || v === undefined || Number.isNaN(v) ? null : v)),
+          data: s.displayedValues.map((v) => (v === null || v === undefined || Number.isNaN(v) ? null : v)),
         })),
       };
     }
 
     function buildPeriodPieOption(bucket, series, metricKey) {
+      const monthCount = Array.isArray(bucket && bucket.months) ? bucket.months.length : 0;
       const data = series
-        .map((s) => ({ name: s.label, value: s.values[0], itemStyle: { color: s.color } }))
+        .map((s) => ({
+          name: s.label,
+          value: getDisplayedMetricValue(metricKey, s.values[0], monthCount),
+          itemStyle: { color: s.color },
+        }))
         .filter((d) => Number.isFinite(d.value) && d.value > 0);
       if (!data.length) return null;
       return {
@@ -2316,7 +2325,7 @@
             fontSize: 12,
           },
           extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
-          formatter: (p) => `${escapeHtml(bucket.label)}<br/>${escapeHtml(p.name)}: ${escapeHtml(formatMetricValue(metricKey, p.value))}`,
+          formatter: (p) => `${escapeHtml(String((p && p.name) || ""))}: ${escapeHtml(formatDisplayedMetricValue(metricKey, Number(p && p.value)))}`,
         },
         series: [{
           name: bucket.label,
@@ -2331,9 +2340,10 @@
       };
     }
 
-    function buildPeriodDivergingOption(bucket, series, metricKey, legendRankBySeriesId) {
+    function buildPeriodDivergingOption(bucket, series, metricKey) {
+      const monthCount = Array.isArray(bucket && bucket.months) ? bucket.months.length : 0;
       const values = series
-        .map((s) => ({ ...s, v: s.values[0] }))
+        .map((s) => ({ ...s, v: getDisplayedMetricValue(metricKey, s.values[0], monthCount) }))
         .filter((s) => Number.isFinite(s.v) && s.v !== 0);
       if (!values.length) return null;
       return {
@@ -2341,8 +2351,7 @@
         backgroundColor: "transparent",
         color: values.map((s) => s.color),
         tooltip: {
-          trigger: "axis",
-          axisPointer: { type: "shadow" },
+          trigger: "item",
           backgroundColor: "rgba(18, 28, 44, 0.96)",
           borderColor: "#2f4a6a",
           borderWidth: 1,
@@ -2352,14 +2361,10 @@
             fontSize: 12,
           },
           extraCssText: "box-shadow: 0 10px 24px rgba(0,0,0,0.35); border-radius: 8px;",
-          formatter: (params) => {
-            if (!params || !params.length) return "";
-            const header = escapeHtml(bucket.label);
-            const orderedParams = sortTooltipParamsByLegendOrder(params, legendRankBySeriesId);
-            const lines = orderedParams
-              .filter((p) => p.data !== null && p.data !== undefined && !Number.isNaN(p.data) && p.data !== 0)
-              .map((p) => `${escapeHtml(p.seriesName)}: ${escapeHtml(formatMetricValue(metricKey, p.data))}`);
-            return [header, ...lines].join("<br/>");
+          formatter: (p) => {
+            if (!p) return "";
+            const v = (p.data === null || p.data === undefined || Number.isNaN(p.data)) ? null : Number(p.data);
+            return `${escapeHtml(String(p.seriesName || ""))}: ${escapeHtml(formatDisplayedMetricValue(metricKey, v))}`;
           },
         },
         grid: { left: 38, right: 28, top: 24, bottom: 50 },
@@ -2368,7 +2373,7 @@
           axisLabel: {
             color: "#a9b7cb",
             fontFamily: "JetBrains Mono, monospace",
-            formatter: (v) => formatMetricValue(metricKey, Number(v)),
+            formatter: (v) => formatDisplayedMetricValue(metricKey, Number(v)),
           },
           splitLine: { lineStyle: { color: "rgba(69, 97, 135, 0.35)" } },
           axisLine: { lineStyle: { color: "#304661" } },
@@ -2405,7 +2410,6 @@
     function renderChartWithECharts({ buckets, series, metricKey, columnMode, stackOrderSignature = "" }) {
       const legendSeries = series;
       const plotSeries = getSeriesForStackDrawing(legendSeries, metricKey, columnMode);
-      const legendRankBySeriesId = buildLegendRankBySeriesId(legendSeries);
 
       renderLegendPanel(legendSeries, stackOrderSignature);
       if (!buckets.length || !series.length) {
@@ -2416,9 +2420,9 @@
       let option = null;
       if (columnMode === "period" && buckets.length === 1) {
         if (metricKey === "weight_pct") option = buildPeriodPieOption(buckets[0], legendSeries, metricKey);
-        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey, legendRankBySeriesId);
+        else if (metricKey === "contrib_pp") option = buildPeriodDivergingOption(buckets[0], plotSeries, metricKey);
       } else {
-        option = buildStackedBarOption(buckets, plotSeries, metricKey, legendRankBySeriesId);
+        option = buildStackedBarOption(buckets, plotSeries, metricKey);
       }
 
       if (!option) {
