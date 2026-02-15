@@ -2299,22 +2299,6 @@
       const compareMode = isCompareGroupingMode() && periodBuckets.length >= 2;
       const staticCols = [
         {
-          title: "Expand",
-          field: "expand",
-          width: 74,
-          widthGrow: 0,
-          widthShrink: 0,
-          hozAlign: "center",
-          headerSort: false,
-          formatter: (cell) => {
-            const data = cell.getData();
-            if (data.rowType !== "component" || !data.hasChildren) return `<span class="tree-spacer"></span>`;
-            const action = data.isExpanded ? "Collapse" : "Expand";
-            const text = `${action} ${data.componentLabel || ""}`;
-            return `<button type="button" class="tree-toggle" data-line="${data.line}" aria-label="${escapeHtml(text)}" title="${escapeHtml(text)}">${data.isExpanded ? "-" : "+"}</button>`;
-          },
-        },
-        {
           title: "Plot",
           field: "plot",
           width: 62,
@@ -2344,7 +2328,11 @@
               const action = data.isActiveParent
                 ? `Focused: ${data.componentLabel || ""}`
                 : `Focus on ${data.componentLabel || ""}`;
+              const toggleHtml = data.hasChildren
+                ? `<button type="button" class="tree-toggle" data-line="${data.line}" aria-label="${escapeHtml(`${data.isExpanded ? "Collapse" : "Expand"} ${data.componentLabel || ""}`)}" title="${escapeHtml(`${data.isExpanded ? "Collapse" : "Expand"} ${data.componentLabel || ""}`)}">${data.isExpanded ? "-" : "+"}</button>`
+                : `<span class="tree-spacer"></span>`;
               return `<div class="quant-node-label" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">
+                ${toggleHtml}
                 <button type="button" class="component-focus-line" data-line="${data.line}" ${data.isActiveParent ? "disabled" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}">${escapeHtml(data.componentLabel || "")}</button>
               </div>`;
             }
