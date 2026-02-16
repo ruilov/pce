@@ -3914,12 +3914,12 @@
         }
 
         if (!state.defaultsInitializedFromData) {
-          const detectedDefaultRange = computeDefaultYmRangeFromModel(model, 5);
+          const detectedDefaultRange = computeDefaultYmRangeFromModel(model, 10);
           if (detectedDefaultRange) {
             setSelectorsFromYm(startMonthEl, startYearEl, detectedDefaultRange.startYM);
             setSelectorsFromYm(endMonthEl, endYearEl, detectedDefaultRange.endYM);
           } else {
-            const fallbackRange = defaultRangeLastMonths(60);
+            const fallbackRange = defaultRangeLastMonths(120);
             setSelectorsFromYm(startMonthEl, startYearEl, fallbackRange.start);
             setSelectorsFromYm(endMonthEl, endYearEl, fallbackRange.end);
           }
@@ -3968,7 +3968,7 @@
       }
     }
 
-    const def = defaultRangeLastMonths(36);
+    const def = defaultRangeLastMonths(120);
     populateMonthOptions(startMonthEl);
     populateMonthOptions(endMonthEl);
     populateMonthOptions(compareStartMonthEl);
