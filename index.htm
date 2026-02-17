@@ -467,6 +467,18 @@
         padding: 10px;
       }
       label { width: 100%; justify-content: space-between; }
+      label.month-year-label {
+        justify-content: flex-start;
+        gap: 6px;
+      }
+      label.month-year-label > select:nth-of-type(1) {
+        width: 72px;
+        min-width: 72px;
+      }
+      label.month-year-label > select:nth-of-type(2) {
+        width: 84px;
+        min-width: 84px;
+      }
     }
   </style>
 </head>
@@ -474,11 +486,11 @@
   <h1>PCE Inflation Explorer</h1>
 
   <div class="row">
-    <label>Start (MM/YYYY):
+    <label class="month-year-label">Start (MM/YYYY):
       <select id="startMonth"></select>
       <select id="startYear"></select>
     </label>
-    <label>End (MM/YYYY):
+    <label class="month-year-label">End (MM/YYYY):
       <select id="endMonth"></select>
       <select id="endYear"></select>
     </label>
@@ -506,11 +518,11 @@
   </div>
 
   <div class="row compare-controls" id="compareControls" hidden>
-    <label>B Start (MM/YYYY):
+    <label class="month-year-label">B Start (MM/YYYY):
       <select id="compareStartMonth"></select>
       <select id="compareStartYear"></select>
     </label>
-    <label>B End (MM/YYYY):
+    <label class="month-year-label">B End (MM/YYYY):
       <select id="compareEndMonth"></select>
       <select id="compareEndYear"></select>
     </label>
@@ -4543,7 +4555,6 @@
   </script>
 </body>
 </html>
-
 
 
 
