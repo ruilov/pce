@@ -572,6 +572,7 @@
     const compareEndYearEl = document.getElementById("compareEndYear");
 
     const csvRowsCache = new Map();
+    const RESIDUAL_ZERO_TOL = 1e-10;
     const state = {
       model: null,
       columnMode: DEFAULT_COLUMN_MODE,
@@ -580,7 +581,6 @@
       expanded: new Set(),
       chartSeriesCache: new Map(),
       plotSelectedByLine: new Map(),
-      plotResidualSelected: false,
       plotStackOrderTopToBottom: [],
       plotStackOrderVersion: 0,
       activeParentLine: null,
@@ -1298,7 +1298,8 @@
         priceBySeries: new Map(),
         nominalBySeries: new Map(),
         unresolvedPriceSeriesLines: [],
-        dlnCache: new Map(),
+        pctChangeCache: new Map(),
+        seriesPctChangeCache: new Map(),
         avgWeightCache: new Map(),
         currentWeightCache: new Map(),
         basisWeightCache: new Map(),
@@ -1315,6 +1316,11 @@
         selectedAverageWeightCache: new Map(),
         selectedContributionMonthlyCache: new Map(),
         selectedContributionBucketCache: new Map(),
+        selectedContributionBucketDynamicCache: new Map(),
+        selectedLineMonthlyRelativeCache: new Map(),
+        selectedLineBucketRateCache: new Map(),
+        selectedCoalitionBucketValueCache: new Map(),
+        selectedLocalShapleyCache: new Map(),
         contributionDisplayScaleCache: new Map(),
       };
     }
@@ -1365,13 +1371,13 @@
       return byTp.has(tp) ? byTp.get(tp) : null;
     }
 
-    function getDln(model, line, tp) {
+    function getPctChange(model, line, tp) {
       const key = `${line}|${tp}`;
-      if (model.dlnCache.has(key)) return model.dlnCache.get(key);
+      if (model.pctChangeCache.has(key)) return model.pctChangeCache.get(key);
 
       const prevTp = prevTimePeriod(tp);
       if (!prevTp) {
-        model.dlnCache.set(key, null);
+        model.pctChangeCache.set(key, null);
         return null;
       }
 
@@ -1379,8 +1385,25 @@
       const priceSeriesCode = meta ? meta.priceSeriesCode : null;
       const p = getSeriesValueByCode(model.priceBySeries, priceSeriesCode, tp);
       const pPrev = getSeriesValueByCode(model.priceBySeries, priceSeriesCode, prevTp);
-      const out = (p !== null && pPrev !== null && p > 0 && pPrev > 0) ? Math.log(p) - Math.log(pPrev) : null;
-      model.dlnCache.set(key, out);
+      const out = (p !== null && pPrev !== null && p > 0 && pPrev > 0) ? ((p / pPrev) - 1) : null;
+      model.pctChangeCache.set(key, out);
+      return out;
+    }
+
+    function getSeriesPctChangeByCode(model, seriesByCode, seriesCode, tp) {
+      const code = String(seriesCode || "").trim();
+      const key = `${code}|${tp}`;
+      if (model.seriesPctChangeCache.has(key)) return model.seriesPctChangeCache.get(key);
+
+      const prevTp = prevTimePeriod(tp);
+      if (!prevTp || !code) {
+        model.seriesPctChangeCache.set(key, null);
+        return null;
+      }
+      const p = getSeriesValueByCode(seriesByCode, code, tp);
+      const pPrev = getSeriesValueByCode(seriesByCode, code, prevTp);
+      const out = (p !== null && pPrev !== null && p > 0 && pPrev > 0) ? ((p / pPrev) - 1) : null;
+      model.seriesPctChangeCache.set(key, out);
       return out;
     }
 
@@ -1642,15 +1665,6 @@
       return out;
     }
 
-    function getSeriesDlnByCode(seriesByCode, seriesCode, tp) {
-      const prevTp = prevTimePeriod(tp);
-      if (!prevTp) return null;
-      const p = getSeriesValueByCode(seriesByCode, seriesCode, tp);
-      const pPrev = getSeriesValueByCode(seriesByCode, seriesCode, prevTp);
-      if (p === null || pPrev === null || p <= 0 || pPrev <= 0) return null;
-      return Math.log(p) - Math.log(pPrev);
-    }
-
     function isCoreContribContext(metricKey) {
       return isCoreEnabled() && metricKey === "contrib_pp";
     }
@@ -1708,13 +1722,13 @@
     }
 
     function computeDirectContributionToBasis(model, line, basisParentLine, tp) {
-      const dln = getDln(model, line, tp);
-      if (dln === null) return null;
+      const pct = getPctChange(model, line, tp);
+      if (pct === null) return null;
       const wBar = getAverageWeightToParent(model, line, basisParentLine, tp);
       if (wBar === null) return null;
       const pathSign = getPathSignToAncestor(model, line, basisParentLine);
       if (pathSign === null) return null;
-      return 100 * wBar * dln * pathSign;
+      return 100 * wBar * pct * pathSign;
     }
 
     function computeDirectCoreContributionToBasis(model, line, basisParentLine, tp) {
@@ -1828,6 +1842,41 @@
       return Boolean(getCoreComparatorSpec(line));
     }
 
+    function computeOfficialComparablePctChange(model, line, tp) {
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${line}|${tp}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|official_pct`;
+      if (model.officialComparableContributionCache.has(key)) {
+        return model.officialComparableContributionCache.get(key);
+      }
+
+      const spec = getCoreComparatorSpec(line);
+      if (!spec) {
+        model.officialComparableContributionCache.set(key, null);
+        return null;
+      }
+
+      let out = null;
+      if (spec.kind === "direct_series") {
+        if (spec.seriesCode) {
+          out = getSeriesPctChangeByCode(model, model.priceBySeries, spec.seriesCode, tp);
+        } else if (spec.priceSeriesCode && spec.nominalSeriesCode) {
+          const hasNominal = model.nominalBySeries.has(String(spec.nominalSeriesCode));
+          const hasPrice = model.priceBySeries.has(String(spec.priceSeriesCode));
+          if (hasNominal && hasPrice) {
+            out = getSeriesPctChangeByCode(model, model.priceBySeries, spec.priceSeriesCode, tp);
+          }
+        }
+      } else if (spec.kind === "direct_line" && Number.isFinite(spec.line) && model.metaByLine.has(spec.line)) {
+        const cmpLine = Number(spec.line);
+        if (isDescendantOrSelf(model, cmpLine, activeParentLine) || cmpLine === activeParentLine) {
+          out = getPctChange(model, cmpLine, tp);
+        }
+      }
+
+      model.officialComparableContributionCache.set(key, out);
+      return out;
+    }
+
     function computeOfficialComparableContribution(model, line, tp) {
       const activeParentLine = getActiveParentLine(model);
       const key = `${line}|${tp}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
@@ -1843,17 +1892,8 @@
 
       let out = null;
       if (spec.kind === "direct_series") {
-        let dln = null;
-        if (spec.seriesCode) {
-          dln = getSeriesDlnByCode(model.priceBySeries, spec.seriesCode, tp);
-        } else if (spec.priceSeriesCode && spec.nominalSeriesCode) {
-          const hasNominal = model.nominalBySeries.has(String(spec.nominalSeriesCode));
-          const hasPrice = model.priceBySeries.has(String(spec.priceSeriesCode));
-          if (hasNominal && hasPrice) {
-            dln = getSeriesDlnByCode(model.priceBySeries, spec.priceSeriesCode, tp);
-          }
-        }
-        out = dln === null ? null : (100 * dln);
+        const pct = computeOfficialComparablePctChange(model, line, tp);
+        out = pct === null ? null : (100 * pct);
       } else if (spec.kind === "direct_line" && Number.isFinite(spec.line) && model.metaByLine.has(spec.line)) {
         const cmpLine = Number(spec.line);
         if (isDescendantOrSelf(model, cmpLine, activeParentLine) || cmpLine === activeParentLine) {
@@ -1958,9 +1998,9 @@
         return getSeriesValueByCode(model.nominalBySeries, meta.nominalSeriesCode, tp);
       }
 
-      const dln = getDln(model, line, tp);
+      const pct = getPctChange(model, line, tp);
       if (metricKey === "mom_pct") {
-        return dln === null ? null : (100 * dln);
+        return pct === null ? null : (100 * pct);
       }
 
       if (metricKey === "weight_pct") {
@@ -1977,15 +2017,15 @@
           return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
         }
         if (line === activeParentLine) {
-          if (dln === null) return null;
-          return 100 * dln;
+          if (pct === null) return null;
+          return 100 * pct;
         }
-        if (dln === null) return null;
+        if (pct === null) return null;
         const wBar = getAverageWeightToParent(model, line, activeParentLine, tp);
         if (wBar === null) return null;
         const pathSign = getPathSignToAncestor(model, line, activeParentLine);
         if (pathSign === null) return null;
-        return 100 * wBar * dln * pathSign;
+        return 100 * wBar * pct * pathSign;
       }
 
       return null;
@@ -2020,20 +2060,34 @@
       return count ? sum : null;
     }
 
+    function normalizeResidualDisplayValue(v) {
+      if (v === null || v === undefined || Number.isNaN(v)) return null;
+      if (!Number.isFinite(v)) return null;
+      return Math.abs(v) <= RESIDUAL_ZERO_TOL ? 0 : v;
+    }
+
     function computeBucketMetricValue(metricKey, line, bucket, model) {
       const activeParentLine = getActiveParentLine(model);
-      const key = `${metricKey}|${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      const selectionSig = metricKey === "contrib_pp" ? buildSelectionSignatureForModel(model) : "";
+      const key = `${metricKey}|${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}`;
       if (model.bucketMetricCache.has(key)) return model.bucketMetricCache.get(key);
 
-      const monthly = bucket.months.map((tp) => computeMetricValue(metricKey, line, tp, model));
       let out = null;
 
-      if (metricKey === "contrib_pp" || metricKey === "mom_pct") {
-        out = sumNonNull(monthly);
-      } else if (metricKey === "weight_pct") {
-        out = meanNonNull(monthly);
-      } else if (metricKey === "price_level" || metricKey === "nominal_level") {
-        out = lastNonNull(monthly);
+      if (metricKey === "contrib_pp") {
+        const plotStateCache = new Map();
+        const selectionSig = buildSelectionSignatureForModel(model);
+        const selectionCtx = buildContributionSelectionContext(model, plotStateCache, selectionSig);
+        out = computeSelectedContributionBucketValue(model, line, bucket, plotStateCache, null, selectionSig, selectionCtx);
+      } else {
+        const monthly = bucket.months.map((tp) => computeMetricValue(metricKey, line, tp, model));
+        if (metricKey === "mom_pct") {
+          out = sumNonNull(monthly);
+        } else if (metricKey === "weight_pct") {
+          out = meanNonNull(monthly);
+        } else if (metricKey === "price_level" || metricKey === "nominal_level") {
+          out = lastNonNull(monthly);
+        }
       }
 
       model.bucketMetricCache.set(key, out);
@@ -2042,7 +2096,8 @@
 
     function computeResidualBucketValue(parentLine, bucket, model) {
       const activeParentLine = getActiveParentLine(model);
-      const key = `${parentLine}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      const selectionSig = buildSelectionSignatureForModel(model);
+      const key = `${parentLine}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}`;
       if (model.bucketResidualCache.has(key)) return model.bucketResidualCache.get(key);
 
       if (!shouldShowResidualForLine(model, parentLine, "contrib_pp")) {
@@ -2071,7 +2126,7 @@
         sumChildren += v;
       }
 
-      const out = hasAnyChild ? (parentVal - sumChildren) : null;
+      const out = hasAnyChild ? normalizeResidualDisplayValue(parentVal - sumChildren) : null;
       model.bucketResidualCache.set(key, out);
       return out;
     }
@@ -2129,6 +2184,11 @@
 
       let scale = null;
       if (n > 0) {
+        if (isExactGroupedContributionMode()) {
+          scale = 1;
+          model.contributionDisplayScaleCache.set(key, scale);
+          return scale;
+        }
         const plotStateCache = new Map();
         const selectionCtx = buildContributionSelectionContext(model, plotStateCache, selectionSig);
         const totalRaw = computeSelectedContributionBucketValue(
@@ -2256,7 +2316,6 @@
         if (isExcludedInCore(line, model)) continue;
         out.push(`${line}:${selected ? 1 : 0}`);
       }
-      out.push(`residual:${state.plotResidualSelected ? 1 : 0}`);
       out.sort();
       return out.join(",");
     }
@@ -2626,13 +2685,13 @@
     }
 
     function computeSelectedDirectContributionToBasis(model, line, basisLine, tp, selectionCtx) {
-      const dln = getDln(model, line, tp);
-      if (dln === null || dln === undefined || Number.isNaN(dln)) return null;
+      const pct = getPctChange(model, line, tp);
+      if (pct === null || pct === undefined || Number.isNaN(pct)) return null;
       const wBar = computeSelectedAverageWeightToBasis(model, line, basisLine, tp, selectionCtx);
       if (wBar === null || wBar === undefined || Number.isNaN(wBar)) return null;
       const pathSign = getPathSignToAncestor(model, line, basisLine);
       if (pathSign === null || pathSign === undefined || Number.isNaN(pathSign)) return null;
-      return 100 * wBar * dln * pathSign;
+      return 100 * wBar * pct * pathSign;
     }
 
     function computeSelectedContributionMonthly(model, line, tp, selectionCtx) {
@@ -2680,14 +2739,349 @@
       return out;
     }
 
+    function isExactGroupedContributionMode() {
+      // Root cause note: month previously used legacy monthly-sum approximation,
+      // which can leave small non-zero residuals. Include month so all contrib
+      // grouping modes use the exact Fisher/Shapley bucket path.
+      return state.columnMode === "month"
+        || state.columnMode === "quarter"
+        || state.columnMode === "year"
+        || state.columnMode === "period"
+        || state.columnMode === "compare";
+    }
+
+    function popCount32(v) {
+      let n = v >>> 0;
+      let c = 0;
+      while (n) {
+        n &= (n - 1);
+        c += 1;
+      }
+      return c;
+    }
+
+    function getSelectedChildrenForParent(model, parentLine, selectionCtx) {
+      const children = getIncludedChildren(model, parentLine);
+      return children.filter((child) => getPlotSelectionStateForLine(model, child, selectionCtx.plotStateCache) !== "unchecked");
+    }
+
+    function annualizeBucketPercentOrLinear(bucketPercent, monthCount) {
+      const ann = annualizePercentForBucket(bucketPercent, monthCount);
+      if (Number.isFinite(ann)) return ann;
+      if (Number.isFinite(bucketPercent) && Number.isFinite(monthCount) && monthCount > 0) {
+        return bucketPercent * (12 / monthCount);
+      }
+      return null;
+    }
+
+    function computeSelectedMonthlyFisherGrossForCoalition(model, parentLine, tp, coalitionChildren, selectionCtx) {
+      // Correct characteristic function for Shapley:
+      // evaluate coalition S on a fixed parent baseline U (all selected children),
+      // with non-members of S frozen at 0% monthly change (gross=1).
+      const universeChildren = getSelectedChildrenForParent(model, parentLine, selectionCtx);
+      if (!universeChildren.length) return 1;
+      const prevTp = prevTimePeriod(tp);
+      if (!prevTp) return null;
+      const coalitionSet = new Set((coalitionChildren || []).map((v) => Number(v)).filter(Number.isFinite));
+
+      let lasNum = 0;
+      let lasDen = 0;
+      let paaNum = 0;
+      let paaDen = 0;
+      let hasAny = false;
+
+      for (const child of universeChildren) {
+        const inCoalition = coalitionSet.has(child);
+        let rel = 0;
+        if (inCoalition) {
+          rel = computeSelectedLineMonthlyRelative(model, child, tp, selectionCtx);
+          if (!Number.isFinite(rel)) return null;
+        }
+        const gross = 1 + rel;
+        if (!(gross > 0)) return null;
+
+        const childNomPrev = computeSelectedNominalAggregate(model, child, prevTp, selectionCtx);
+        const childNomCurr = computeSelectedNominalAggregate(model, child, tp, selectionCtx);
+        if (!Number.isFinite(childNomPrev) || !Number.isFinite(childNomCurr)) return null;
+        const signedNomPrev = getEdgeSignForLine(model, child) * childNomPrev;
+        const signedNomCurr = getEdgeSignForLine(model, child) * childNomCurr;
+
+        lasNum += signedNomPrev * gross;
+        lasDen += signedNomPrev;
+        paaNum += signedNomCurr;
+        paaDen += (signedNomCurr / gross);
+        hasAny = true;
+      }
+
+      if (hasAny && lasNum > 0 && lasDen > 0 && paaNum > 0 && paaDen > 0) {
+        const las = lasNum / lasDen;
+        const paa = paaNum / paaDen;
+        if (las > 0 && paa > 0) {
+          const fisher = Math.sqrt(las * paa);
+          if (Number.isFinite(fisher) && fisher > 0) return fisher;
+        }
+      }
+
+      // Fallback: linear monthly aggregation in unstable edge cases.
+      // This is a data-availability guard, not the canonical exact decomposition path.
+      let sumPct = 0;
+      let hasFallback = false;
+      for (const child of universeChildren) {
+        if (!coalitionSet.has(child)) continue;
+        const c = computeSelectedDirectContributionToBasis(model, child, parentLine, tp, selectionCtx);
+        if (!Number.isFinite(c)) continue;
+        sumPct += (c / 100);
+        hasFallback = true;
+      }
+      if (!hasFallback) return null;
+      const gross = 1 + sumPct;
+      return gross > 0 ? gross : null;
+    }
+
+    function computeSelectedLineMonthlyRelative(model, line, tp, selectionCtx) {
+      if (!model || !model.metaByLine.has(line)) return null;
+      const cacheSuffix = getSelectedContributionCacheSuffix(selectionCtx);
+      const key = `${line}|${tp}|line_rel|${cacheSuffix}`;
+      if (model.selectedLineMonthlyRelativeCache.has(key)) return model.selectedLineMonthlyRelativeCache.get(key);
+
+      const selectionState = getPlotSelectionStateForLine(model, line, selectionCtx.plotStateCache);
+      if (selectionState === "unchecked") {
+        model.selectedLineMonthlyRelativeCache.set(key, null);
+        return null;
+      }
+
+      const activeParentLine = selectionCtx.activeParentLine;
+      const needsRebuild = (selectionState === "indeterminate")
+        || (selectionCtx.coreEnabled && needsCoreReconstructionForLine(model, line, activeParentLine));
+      const selectedChildren = getSelectedChildrenForParent(model, line, selectionCtx);
+
+      let out = null;
+      if (needsRebuild && selectedChildren.length) {
+        const gross = computeSelectedMonthlyFisherGrossForCoalition(model, line, tp, selectedChildren, selectionCtx);
+        out = Number.isFinite(gross) ? (gross - 1) : null;
+      } else {
+        out = getPctChange(model, line, tp);
+        if (!Number.isFinite(out) && selectedChildren.length) {
+          const gross = computeSelectedMonthlyFisherGrossForCoalition(model, line, tp, selectedChildren, selectionCtx);
+          out = Number.isFinite(gross) ? (gross - 1) : null;
+        }
+      }
+
+      model.selectedLineMonthlyRelativeCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedLineBucketRateExact(model, line, bucket, selectionCtx) {
+      if (!bucket || !Array.isArray(bucket.months) || !bucket.months.length) return null;
+      const cacheSuffix = getSelectedContributionCacheSuffix(selectionCtx);
+      const key = `${line}|${bucket.id}|line_bucket_rate|${cacheSuffix}`;
+      if (model.selectedLineBucketRateCache.has(key)) return model.selectedLineBucketRateCache.get(key);
+
+      const selectionState = getPlotSelectionStateForLine(model, line, selectionCtx.plotStateCache);
+      if (selectionState === "unchecked") {
+        model.selectedLineBucketRateCache.set(key, 0);
+        return 0;
+      }
+
+      let chain = 1;
+      for (const tp of bucket.months) {
+        const rel = computeSelectedLineMonthlyRelative(model, line, tp, selectionCtx);
+        if (!Number.isFinite(rel)) {
+          model.selectedLineBucketRateCache.set(key, null);
+          return null;
+        }
+        const gross = 1 + rel;
+        if (!(gross > 0)) {
+          model.selectedLineBucketRateCache.set(key, null);
+          return null;
+        }
+        chain *= gross;
+      }
+      const bucketPct = 100 * (chain - 1);
+      const out = annualizeBucketPercentOrLinear(bucketPct, bucket.months.length);
+      model.selectedLineBucketRateCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedCoalitionBucketValue(model, parentLine, bucket, players, mask, selectionCtx) {
+      if (mask === 0) return 0;
+      const cacheSuffix = getSelectedContributionCacheSuffix(selectionCtx);
+      const playersSig = players.join(",");
+      const key = `${parentLine}|${bucket.id}|coalition:${mask}|players:${playersSig}|${cacheSuffix}`;
+      if (model.selectedCoalitionBucketValueCache.has(key)) return model.selectedCoalitionBucketValueCache.get(key);
+
+      const coalition = [];
+      for (let i = 0; i < players.length; i++) {
+        if (mask & (1 << i)) coalition.push(players[i]);
+      }
+      if (!coalition.length) {
+        model.selectedCoalitionBucketValueCache.set(key, 0);
+        return 0;
+      }
+
+      let chain = 1;
+      for (const tp of bucket.months) {
+        const gross = computeSelectedMonthlyFisherGrossForCoalition(model, parentLine, tp, coalition, selectionCtx);
+        if (!Number.isFinite(gross) || !(gross > 0)) {
+          model.selectedCoalitionBucketValueCache.set(key, null);
+          return null;
+        }
+        chain *= gross;
+      }
+      const bucketPct = 100 * (chain - 1);
+      const out = annualizeBucketPercentOrLinear(bucketPct, bucket.months.length);
+      model.selectedCoalitionBucketValueCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedLocalShapleyForParentBucket(model, parentLine, bucket, selectionCtx) {
+      const players = getSelectedChildrenForParent(model, parentLine, selectionCtx);
+      const cacheSuffix = getSelectedContributionCacheSuffix(selectionCtx);
+      const playersSig = players.join(",");
+      const key = `${parentLine}|${bucket.id}|local_shapley|players:${playersSig}|${cacheSuffix}`;
+      if (model.selectedLocalShapleyCache.has(key)) return model.selectedLocalShapleyCache.get(key);
+
+      const contributions = new Map();
+      if (!players.length) {
+        const out = { total: 0, contributions };
+        model.selectedLocalShapleyCache.set(key, out);
+        return out;
+      }
+      const n = players.length;
+      if (n > 20) {
+        // Defensive guard; current hierarchy fanout is far below this.
+        for (const child of players) contributions.set(child, 0);
+        const out = { total: 0, contributions };
+        model.selectedLocalShapleyCache.set(key, out);
+        return out;
+      }
+
+      const allMask = (1 << n) - 1;
+      const factorial = [1];
+      for (let i = 1; i <= n; i++) factorial[i] = factorial[i - 1] * i;
+
+      const valuesByMask = new Map();
+      valuesByMask.set(0, 0);
+      for (let mask = 1; mask <= allMask; mask++) {
+        valuesByMask.set(mask, computeSelectedCoalitionBucketValue(model, parentLine, bucket, players, mask, selectionCtx));
+      }
+
+      for (let i = 0; i < n; i++) {
+        const bit = (1 << i);
+        let phi = 0;
+        let hasAny = false;
+        for (let mask = 0; mask <= allMask; mask++) {
+          if (mask & bit) continue;
+          const vS = valuesByMask.get(mask);
+          const vSi = valuesByMask.get(mask | bit);
+          if (!Number.isFinite(vS) || !Number.isFinite(vSi)) continue;
+          const k = popCount32(mask);
+          const w = (factorial[k] * factorial[n - k - 1]) / factorial[n];
+          phi += w * (vSi - vS);
+          hasAny = true;
+        }
+        contributions.set(players[i], hasAny ? phi : 0);
+      }
+
+      const total = valuesByMask.get(allMask);
+      const out = { total: Number.isFinite(total) ? total : null, contributions };
+      model.selectedLocalShapleyCache.set(key, out);
+      return out;
+    }
+
+    function computeOfficialComparableBucketRate(model, line, bucket) {
+      if (!bucket || !Array.isArray(bucket.months) || !bucket.months.length) return null;
+      const activeParentLine = getActiveParentLine(model);
+      const key = `${line}|${bucket.id}|official_bucket|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.selectedLineBucketRateCache.has(key)) return model.selectedLineBucketRateCache.get(key);
+
+      let chain = 1;
+      for (const tp of bucket.months) {
+        const pct = computeOfficialComparablePctChange(model, line, tp);
+        if (!Number.isFinite(pct)) {
+          model.selectedLineBucketRateCache.set(key, null);
+          return null;
+        }
+        const gross = 1 + pct;
+        if (!(gross > 0)) {
+          model.selectedLineBucketRateCache.set(key, null);
+          return null;
+        }
+        chain *= gross;
+      }
+      const bucketPct = 100 * (chain - 1);
+      const out = annualizeBucketPercentOrLinear(bucketPct, bucket.months.length);
+      model.selectedLineBucketRateCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedContributionBucketValueDynamic(model, line, bucket, selectionCtx) {
+      if (!model || !model.metaByLine.has(line)) return null;
+      if (!isDescendantOrSelf(model, line, selectionCtx.activeParentLine)) return null;
+      const cacheSuffix = getSelectedContributionCacheSuffix(selectionCtx);
+      const key = `${line}|${bucket.id}|contrib_selected_bucket_dynamic|${cacheSuffix}`;
+      if (model.selectedContributionBucketDynamicCache.has(key)) return model.selectedContributionBucketDynamicCache.get(key);
+
+      const selectionState = getPlotSelectionStateForLine(model, line, selectionCtx.plotStateCache);
+      if (selectionState === "unchecked") {
+        model.selectedContributionBucketDynamicCache.set(key, 0);
+        return 0;
+      }
+
+      let out = null;
+      if (line === selectionCtx.activeParentLine) {
+        out = computeSelectedLineBucketRateExact(model, line, bucket, selectionCtx);
+      } else {
+        const meta = model.metaByLine.get(line);
+        const parentLine = meta && Number.isFinite(meta.parent) ? meta.parent : null;
+        if (parentLine !== null && model.metaByLine.has(parentLine)) {
+          const parentContribution = computeSelectedContributionBucketValueDynamic(model, parentLine, bucket, selectionCtx);
+          const local = computeSelectedLocalShapleyForParentBucket(model, parentLine, bucket, selectionCtx);
+          const localChild = local && local.contributions.has(line) ? local.contributions.get(line) : null;
+          const parentRate = local ? local.total : null;
+          if (Number.isFinite(parentContribution) && Number.isFinite(localChild) && Number.isFinite(parentRate)) {
+            if (Math.abs(parentRate) <= 1e-12) {
+              out = Math.abs(localChild) <= 1e-12 ? 0 : null;
+            } else {
+              out = localChild * (parentContribution / parentRate);
+            }
+          }
+        }
+      }
+
+      if (!Number.isFinite(out)) {
+        // Guard rail only when exact local Fisher/Shapley projection cannot be formed.
+        const monthly = bucket.months.map((tp) => computeSelectedContributionMonthly(model, line, tp, selectionCtx));
+        const raw = sumNonNull(monthly);
+        out = Number.isFinite(raw) ? annualizeBucketPercentOrLinear(raw, bucket.months.length) : null;
+      }
+
+      model.selectedContributionBucketDynamicCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedContributionBucketValueExact(model, line, bucket, selectionCtx) {
+      if (!model || !model.metaByLine.has(line)) return null;
+      if (line === selectionCtx.activeParentLine && selectionCtx.coreEnabled && selectionCtx.activeSelectionState === "checked" && getCoreComparatorSpec(line)) {
+        const officialTop = computeOfficialComparableBucketRate(model, line, bucket);
+        if (Number.isFinite(officialTop)) return officialTop;
+      }
+      return computeSelectedContributionBucketValueDynamic(model, line, bucket, selectionCtx);
+    }
+
     function computeSelectedContributionBucketValue(model, line, bucket, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
       const ctx = selectionCtx || buildContributionSelectionContext(model, plotStateCache, selectionSig);
       const cacheSuffix = getSelectedContributionCacheSuffix(ctx);
       const key = `${line}|${bucket.id}|contrib_selected_bucket|${cacheSuffix}`;
       if (model.selectedContributionBucketCache.has(key)) return model.selectedContributionBucketCache.get(key);
 
-      const monthly = bucket.months.map((tp) => computeSelectedContributionMonthly(model, line, tp, ctx));
-      const out = sumNonNull(monthly);
+      let out = null;
+      if (isExactGroupedContributionMode()) {
+        out = computeSelectedContributionBucketValueExact(model, line, bucket, ctx);
+      } else {
+        const monthly = bucket.months.map((tp) => computeSelectedContributionMonthly(model, line, tp, ctx));
+        out = sumNonNull(monthly);
+      }
       model.selectedContributionBucketCache.set(key, out);
       return out;
     }
@@ -2704,8 +3098,8 @@
       }
       const children = getIncludedChildren(model, parentLine);
       if (!children.length) {
-        model.selectedBucketResidualCache.set(key, null);
-        return null;
+        model.selectedBucketResidualCache.set(key, 0);
+        return 0;
       }
 
       const parentVal = computeSelectedContributionBucketValue(model, parentLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
@@ -2715,15 +3109,14 @@
       }
 
       let sumChildren = 0;
-      let hasAnyChild = false;
       for (const childLine of children) {
         const v = computeSelectedContributionBucketValue(model, childLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
         if (v === null || v === undefined || Number.isNaN(v)) continue;
-        hasAnyChild = true;
         sumChildren += v;
       }
 
-      const out = hasAnyChild ? (parentVal - sumChildren) : null;
+      const rawResidual = parentVal - sumChildren;
+      const out = normalizeResidualDisplayValue(rawResidual);
       model.selectedBucketResidualCache.set(key, out);
       return out;
     }
@@ -2827,7 +3220,6 @@
       }
 
       const openResidualSums = new Array(periodBuckets.length).fill(0);
-      const openResidualHas = new Array(periodBuckets.length).fill(false);
       if (metricKey === "contrib_pp") {
         const residualParents = getOpenResidualParents(model, effectiveExpandedSet)
           .filter((line) => shouldShowResidualForLine(model, line, metricKey));
@@ -2836,7 +3228,6 @@
           for (const parentLine of residualParents) {
             const v = computeSelectedResidualBucketValue(parentLine, bucket, model, plotStateCache, null, selectionSig, selectionCtx);
             if (v === null || v === undefined || Number.isNaN(v)) continue;
-            openResidualHas[i] = true;
             openResidualSums[i] += v;
           }
         }
@@ -2844,10 +3235,9 @@
 
       const residualValues = periodBuckets.map((_, i) => {
         if (metricKey !== "contrib_pp") return null;
-        if (!openResidualHas[i]) return null;
-        return openResidualSums[i];
+        return normalizeResidualDisplayValue(openResidualSums[i]);
       });
-      if (state.plotResidualSelected && residualValues.some((v) => v !== null)) {
+      if (metricKey === "contrib_pp" && residualValues.some((v) => v !== null)) {
         series.push({
           id: "residual-total",
           label: "Residual",
@@ -2992,38 +3382,37 @@
 
       if (metricKey === "contrib_pp") {
         const residualParents = getVisibleResidualParentLines(model, visibleRows, metricKey);
-        if (residualParents.length > 0) {
-          const residualRow = {
-            rowKey: `residual_total:ap:${activeParentLine}:b:${periodBuckets.length}`,
-            rowType: "residual_total",
-            line: null,
-            depth: 0,
-            hasChildren: false,
-            isExpanded: false,
-            isActiveParent: false,
-            plotSelectable: true,
-            // UI semantics: checked means excluded/hidden.
-            plotSelected: !state.plotResidualSelected,
-            plotIndeterminate: false,
-            componentLabel: "Residual",
-            titleText: "Residual",
-          };
-          for (let b = 0; b < periodBuckets.length; b++) {
-            const field = getBucketFieldKey(b);
-            const values = residualParents.map((parentLine) => computeSelectedResidualBucketValue(
-              parentLine,
-              periodBuckets[b],
-              model,
-              plotStateCache,
-              null,
-              selectionSig,
-              selectionCtx
-            ));
-            residualRow[field] = sumNonNull(values);
-          }
-          applyCompareDelta(residualRow);
-          rows.push(residualRow);
+        const residualRow = {
+          rowKey: `residual_total:ap:${activeParentLine}:b:${periodBuckets.length}`,
+          rowType: "residual_total",
+          line: null,
+          depth: 0,
+          hasChildren: false,
+          isExpanded: false,
+          isActiveParent: false,
+          plotSelectable: false,
+          plotSelected: false,
+          plotIndeterminate: false,
+          componentLabel: "Residual",
+          titleText: "Residual",
+        };
+        for (let b = 0; b < periodBuckets.length; b++) {
+          const field = getBucketFieldKey(b);
+          const values = residualParents.map((parentLine) => computeSelectedResidualBucketValue(
+            parentLine,
+            periodBuckets[b],
+            model,
+            plotStateCache,
+            null,
+            selectionSig,
+            selectionCtx
+          ));
+          const summed = sumNonNull(values);
+          const normalized = normalizeResidualDisplayValue(summed);
+          residualRow[field] = Number.isFinite(normalized) ? normalized : 0;
         }
+        applyCompareDelta(residualRow);
+        rows.push(residualRow);
       }
 
       return rows;
@@ -3078,14 +3467,9 @@
           formatter: (cell) => {
             const data = cell.getData();
             if (!data.plotSelectable) return "";
-            const action = data.rowType === "residual_total"
-              ? `Exclude ${data.componentLabel || ""} from chart`
-              : (metricKey === "contrib_pp"
-                ? `Exclude ${data.componentLabel || ""} from calculation`
-                : `Exclude ${data.componentLabel || ""} from chart`);
-            if (data.rowType === "residual_total") {
-              return `<input type="checkbox" class="plot-select" data-series-id="residual-total" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
-            }
+            const action = (metricKey === "contrib_pp")
+              ? `Exclude ${data.componentLabel || ""} from calculation`
+              : `Exclude ${data.componentLabel || ""} from chart`;
             if (data.rowType !== "component") return "";
             const indeterminateFlag = data.plotIndeterminate ? "1" : "0";
             return `<input type="checkbox" class="plot-select" data-line="${data.line}" data-indeterminate="${indeterminateFlag}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
@@ -4031,13 +4415,6 @@
     outEl.addEventListener("change", (ev) => {
       const cb = ev.target.closest("input.plot-select");
       if (!cb || !state.model) return;
-      const seriesId = String(cb.getAttribute("data-series-id") || "").trim();
-      if (seriesId === "residual-total") {
-        state.plotResidualSelected = !Boolean(cb.checked);
-        state.chartSeriesCache = new Map();
-        renderPivot();
-        return;
-      }
       const line = Number(cb.getAttribute("data-line"));
       if (!Number.isFinite(line)) return;
       const targets = getPlotToggleTargets(state.model, line, { includeSelf: true });
