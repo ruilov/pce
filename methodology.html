@@ -88,7 +88,7 @@
       color: var(--text-2);
       font-size: 13px;
     }
-    ul {
+    ul, ol {
       margin: 0;
       padding-left: 18px;
       color: var(--text-2);
@@ -111,6 +111,40 @@
       color: var(--text-3);
       font-size: 12px;
     }
+    .note-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(20, 35, 56, 0.65);
+      padding: 8px 10px;
+      margin-top: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      color: var(--text-2);
+      margin-top: 8px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    th {
+      color: var(--text-1);
+      text-align: left;
+      background: #1b314f;
+      font-weight: 600;
+    }
+    code {
+      background: #1b2b42;
+      border: 1px solid var(--border);
+      color: #d8e8ff;
+      padding: 2px 5px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
     a {
       color: var(--text-2);
       text-decoration: none;
@@ -131,95 +165,135 @@
   <div class="wrap">
     <div class="top">
       <h1>Methodology</h1>
-      <p class="scope">This document describes the methodology currently implemented in PCE Inflation Explorer. It is a technical implementation note, not a claim of full parity with all BEA production internals.</p>
+      <p class="scope">This page explains how the explorer computes and decomposes inflation. It is designed so a technically trained user can reproduce the numbers from the source data.</p>
       <a class="back-link" href="index.htm">Back to Explorer</a>
     </div>
 
     <section>
-      <h2>Data Inputs and Hierarchy</h2>
+      <h2>1) Data Inputs and Scope</h2>
       <ul>
-        <li>Price indexes come from BEA NIPA Underlying Detail Table 2.4.4U.</li>
-        <li>Nominal levels come from BEA NIPA Underlying Detail Table 2.4.5U.</li>
+        <li>Price index data: BEA NIPA Underlying Detail Table 2.4.4U.</li>
+        <li>Nominal expenditure data: BEA NIPA Underlying Detail Table 2.4.5U.</li>
+        <li>A hierarchy maps each component to a parent line for decomposition.</li>
       </ul>
+      <p class="small-note">This page documents the methodology used in the explorer. It does not claim to reproduce every internal BEA production detail.</p>
     </section>
 
     <section>
-      <h2>Rate and Annualization Conventions</h2>
-      <p>For contribution math, the app uses simple percent changes (not log differences):</p>
-      <div class="formula">r(c,t) = P(c,t) / P(c,t-1) - 1</div>
-      <p>For a bucket of <code>n</code> months, monthly gross changes are chained:</p>
+      <h2>2) Notation and Units</h2>
+      <table>
+        <thead>
+          <tr><th>Symbol</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>P(i,t)</code></td><td>Price index level for component <code>i</code> at month <code>t</code>.</td></tr>
+          <tr><td><code>N(i,t)</code></td><td>Nominal level for component <code>i</code> at month <code>t</code>.</td></tr>
+          <tr><td><code>r(i,t)</code></td><td>Monthly simple rate: <code>P(i,t)/P(i,t-1)-1</code>.</td></tr>
+          <tr><td><code>U</code></td><td>Selected child universe under a parent for decomposition.</td></tr>
+          <tr><td><code>S</code></td><td>A coalition subset of <code>U</code> used in Shapley evaluation.</td></tr>
+          <tr><td><code>v(S)</code></td><td>Annualized coalition value used as the Shapley characteristic function.</td></tr>
+          <tr><td><code>phi_i</code></td><td>Shapley contribution of child <code>i</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="note-box small-note">
+        All displayed Contribution and Weight outputs are in percent units. Contribution values are annualized and displayed to 2 decimals.
+      </div>
+    </section>
+
+    <section>
+      <h2>3) Grouping and Buckets</h2>
+      <ul>
+        <li><code>Month</code>: each month is its own bucket.</li>
+        <li><code>Quarter</code>: selected months are grouped by calendar quarter label <code>YYYY-Qx</code>.</li>
+        <li><code>Year</code>: selected months are grouped by calendar year <code>YYYY</code>.</li>
+        <li><code>Entire period</code>: one bucket from selected start month to end month.</li>
+        <li><code>Compare</code>: Bucket A uses main start/end. Bucket B uses the compare controls.</li>
+      </ul>
+      <p class="small-note">Quarter and year buckets use only months inside the selected date range. Partial quarters/years are allowed.</p>
+    </section>
+
+    <section>
+      <h2>4) Rate Construction and Annualization</h2>
+      <p>Monthly component rate:</p>
+      <div class="formula">r(i,t) = P(i,t) / P(i,t-1) - 1</div>
+      <p>For a bucket with months <code>t=1..n</code>, chain the monthly gross rates:</p>
       <div class="formula">G = product_t (1 + r_t) - 1</div>
-      <p>Then annualized:</p>
-      <div class="formula">A = 100 * ((1 + G)^(12 / n) - 1)</div>
-      <p>If compounded annualization is invalid for a bucket, the fallback is linear scaling:</p>
-      <div class="formula">A_fallback = bucket_percent * (12 / n)</div>
+      <p>Annualize:</p>
+      <div class="formula">A = 100 * ((1 + G)^(12/n) - 1)</div>
+      <p>Fallback when compounding is invalid for a bucket:</p>
+      <div class="formula">A_fallback = bucket_percent * (12/n)</div>
     </section>
 
     <section>
-      <h2>Grouping Logic</h2>
-      <ul>
-        <li><code>Month</code>: one month per bucket.</li>
-        <li><code>Quarter</code>: buckets keyed as <code>YYYY-Qx</code> using selected months.</li>
-        <li><code>Year</code>: buckets keyed as <code>YYYY</code> using selected months.</li>
-        <li><code>Entire period</code>: a single bucket from selected start to end.</li>
-        <li><code>Compare</code>: Bucket A uses main start/end; Bucket B uses compare controls.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Contribution Decomposition (Shapley + Fisher)</h2>
-      <p>The exact contribution engine evaluates each parent using Shapley decomposition over a coalition objective built from Fisher chaining.</p>
-      <p>For parent <code>P</code>, selected child universe <code>U</code>, and coalition <code>S</code>:</p>
-      <div class="formula">g_i(S,t) = 1 + rel_i(t) if i in S; otherwise g_i(S,t) = 1</div>
-      <div class="formula">L_t(S) = sum_{i in U} N_{i,t-1} * g_i(S,t) / sum_{i in U} N_{i,t-1}</div>
-      <div class="formula">P_t(S) = sum_{i in U} N_{i,t} / sum_{i in U} (N_{i,t} / g_i(S,t))</div>
+      <h2>5) Exact Contribution Decomposition (Fisher + Shapley)</h2>
+      <p>For each parent, decomposition is run over its selected children. The characteristic function is evaluated on a fixed parent baseline.</p>
+      <p>For coalition <code>S</code> and month <code>t</code>:</p>
+      <div class="formula">g_i(S,t) = 1 + r(i,t) if i in S, else 1</div>
+      <p>Let <code>s_i</code> be +1 normally and -1 for "Less:" lines. Define signed nominals <code>N*(i,t) = s_i * N(i,t)</code>.</p>
+      <div class="formula">L_t(S) = sum_{i in U} [N*(i,t-1) * g_i(S,t)] / sum_{i in U} N*(i,t-1)</div>
+      <div class="formula">P_t(S) = sum_{i in U} N*(i,t) / sum_{i in U} [N*(i,t) / g_i(S,t)]</div>
       <div class="formula">F_t(S) = sqrt(L_t(S) * P_t(S))</div>
+      <p>Bucket coalition value:</p>
       <div class="formula">v(S) = annualize(100 * (product_t F_t(S) - 1), n)</div>
-      <p>Shapley contribution for child <code>i</code>:</p>
-      <div class="formula">phi_i = sum_{S subseteq N\\{i}} (|S|! * (n-|S|-1)! / n!) * (v(S U {i}) - v(S))</div>
-      <p>For deeper descendants, local decompositions are projected recursively to the active-parent basis.</p>
+      <p>Shapley for each child <code>i</code> in a parent with <code>m</code> children:</p>
+      <div class="formula">phi_i = sum_{S subset of U\{i}} [ |S|! * (m-|S|-1)! / m! ] * [v(S union {i}) - v(S)]</div>
+      <p>For deeper descendants, the explorer computes local Shapley within each decomposed parent and projects those local contributions to the active-parent basis.</p>
+      <div class="note-box small-note">
+        Important detail: non-members of coalition <code>S</code> are frozen at zero change (<code>g=1</code>), not removed. This keeps decomposition aligned with parent inflation.
+      </div>
     </section>
 
     <section>
-      <h2>Core Mode Behavior</h2>
+      <h2>6) Replication Recipe (Single Bucket)</h2>
+      <ol>
+        <li>Select active parent and bucket months.</li>
+        <li>Determine selected children set <code>U</code> after applying Exclude checkboxes.</li>
+        <li>For each child and month, compute <code>r(i,t)</code> from price indexes.</li>
+        <li>For every coalition <code>S</code> of <code>U</code>, compute <code>v(S)</code> using Fisher chaining and annualization.</li>
+        <li>Compute Shapley <code>phi_i</code> for each child from coalition values.</li>
+        <li>If line is deeper than one level below active parent, apply projection to active-parent basis.</li>
+        <li>Compute residual: <code>Residual = Parent - sum(Children)</code> in the same bucket value space.</li>
+      </ol>
+      <p>Two-child shortcut (<code>U={A,B}</code>):</p>
+      <div class="formula">phi_A = 0.5 * (v({A}) - v({})) + 0.5 * (v({A,B}) - v({B}))</div>
+      <div class="formula">phi_B = 0.5 * (v({B}) - v({})) + 0.5 * (v({A,B}) - v({A}))</div>
+      <div class="formula">with v({}) = 0 (after annualization)</div>
+    </section>
+
+    <section>
+      <h2>7) Core Mode Rules</h2>
       <ul>
-        <li>Comparator-backed official top lines exist for:
-          <code>PCE (DPCCRG)</code>, <code>Goods (LA000062/IA000062)</code>, and <code>Services (LA000063/IA000063)</code>.
-        </li>
-        <li>When the active parent is comparator-backed and fully included, the top contribution uses the official comparator path.</li>
-        <li>Under user exclusions, top behavior becomes dynamic (selection-aware rebuild).</li>
-        <li>Any gap between parent and child sum is absorbed by residual via balancing identity.</li>
+        <li>Comparator-backed official top lines are used for: <code>PCE (DPCCRG)</code>, <code>Goods (LA000062/IA000062)</code>, and <code>Services (LA000063/IA000063)</code>.</li>
+        <li>When no user exclusions are active under the active parent, these official comparator paths anchor the top-line contribution.</li>
+        <li>When exclusions are active, the top line is rebuilt dynamically from the selected universe.</li>
+        <li>Any gap between top line and selected child sum is allocated to residual.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Residual and Exclusions</h2>
-      <p>Residual is defined in the same bucket/value space:</p>
-      <div class="formula">Residual = Parent - sum(Children)</div>
+      <h2>8) Exclude Semantics and Residual Visibility</h2>
       <ul>
-        <li>Exclude semantics: checked checkbox means excluded.</li>
-        <li>For contribution, exclusions alter the selected universe used in decomposition.</li>
-        <li>Residual appears as a consolidated line in the table for contribution contexts (and can be zero).</li>
-        <li>Residual chart visibility is controlled by the residual exclude checkbox.</li>
+        <li>Checkbox semantics are inverted: checked means excluded.</li>
+        <li>For contribution, exclusion removes a line/subtree from the calculation universe.</li>
+        <li>Tri-state parent checkbox reflects child states (checked, unchecked, mixed).</li>
+        <li>Residual has its own exclude checkbox and is checked by default (excluded from chart by default).</li>
       </ul>
     </section>
 
     <section>
-      <h2>Precision, Rounding, and Small Differences</h2>
+      <h2>9) Precision and Rounding Policy</h2>
       <ul>
-        <li>Internal calculations use floating-point arithmetic and multiple chained transforms.</li>
-        <li>Residual is normalized with a small tolerance before display.</li>
-        <li>Displayed values are rounded to 2 decimals, so identities can differ by rounding at display level.</li>
-        <li>Comparator-backed core paths and dynamic rebuild paths can diverge in ways that are methodologically intentional.</li>
+        <li>Calculations use floating-point arithmetic.</li>
+        <li>Near-zero residual values are clamped using a small tolerance before display.</li>
+        <li>Displayed values are rounded to 2 decimals, so displayed sums can differ by 0.01 from unrounded internals.</li>
       </ul>
     </section>
 
     <section>
-      <h2>Known Scope Limits</h2>
+      <h2>10) Practical Limits</h2>
       <ul>
-        <li>This page documents implemented app behavior, not an official BEA methodology specification.</li>
-        <li>Where required data are unavailable or unstable, fallback behavior is used for robustness.</li>
-        <li>The decomposition engine is exact at local parent fanout via subset enumeration, with practical guardrails.</li>
+        <li>This is a transparent, reproducible methodology for the app, not an official BEA system specification.</li>
+        <li>Fallback rules are used when bucket compounding or data availability make exact calculations unstable.</li>
       </ul>
     </section>
 
