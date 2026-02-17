@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PCE Inflation Explorer - Methodology</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-0: #0a0f1a;
+      --bg-1: #111827;
+      --bg-2: #172235;
+      --border: #2a3a54;
+      --text-1: #d8e3f3;
+      --text-2: #a5b3c8;
+      --text-3: #7e8da6;
+      --accent: #5ea1ff;
+      --radius: 10px;
+      --mono: "JetBrains Mono", "Consolas", "Menlo", monospace;
+      --sans: "Inter", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text-1);
+      background:
+        radial-gradient(1000px 500px at -8% -12%, rgba(85, 144, 255, 0.22), transparent 58%),
+        linear-gradient(160deg, #070b13 0%, var(--bg-0) 52%, #0d1524 100%);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px 18px 28px;
+    }
+    .top {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(24, 37, 57, 0.96), rgba(17, 26, 41, 0.94));
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+      color: #eef5ff;
+    }
+    .scope {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 13px;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 10px;
+      color: var(--text-2);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12px;
+    }
+    .back-link:hover,
+    .back-link:focus-visible {
+      color: var(--text-1);
+      text-decoration: underline;
+    }
+    section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(24, 36, 56, 0.9), rgba(16, 25, 40, 0.92));
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: #eef5ff;
+      letter-spacing: 0.15px;
+    }
+    p {
+      margin: 0 0 8px;
+      color: var(--text-2);
+      font-size: 13px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text-2);
+      font-size: 13px;
+    }
+    li { margin: 0 0 5px; }
+    .formula {
+      margin: 7px 0;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #142238;
+      color: #dbe9ff;
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .small-note {
+      color: var(--text-3);
+      font-size: 12px;
+    }
+    a {
+      color: var(--text-2);
+      text-decoration: none;
+    }
+    a:hover,
+    a:focus-visible {
+      color: var(--text-1);
+      text-decoration: underline;
+    }
+    .footer-note {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Methodology</h1>
+      <p class="scope">This document describes the methodology currently implemented in PCE Inflation Explorer. It is a technical implementation note, not a claim of full parity with all BEA production internals.</p>
+      <a class="back-link" href="index.htm">Back to Explorer</a>
+    </div>
+
+    <section>
+      <h2>Data Inputs and Hierarchy</h2>
+      <ul>
+        <li>Price indexes come from BEA NIPA Underlying Detail Table 2.4.4U.</li>
+        <li>Nominal levels come from BEA NIPA Underlying Detail Table 2.4.5U.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Rate and Annualization Conventions</h2>
+      <p>For contribution math, the app uses simple percent changes (not log differences):</p>
+      <div class="formula">r(c,t) = P(c,t) / P(c,t-1) - 1</div>
+      <p>For a bucket of <code>n</code> months, monthly gross changes are chained:</p>
+      <div class="formula">G = product_t (1 + r_t) - 1</div>
+      <p>Then annualized:</p>
+      <div class="formula">A = 100 * ((1 + G)^(12 / n) - 1)</div>
+      <p>If compounded annualization is invalid for a bucket, the fallback is linear scaling:</p>
+      <div class="formula">A_fallback = bucket_percent * (12 / n)</div>
+    </section>
+
+    <section>
+      <h2>Grouping Logic</h2>
+      <ul>
+        <li><code>Month</code>: one month per bucket.</li>
+        <li><code>Quarter</code>: buckets keyed as <code>YYYY-Qx</code> using selected months.</li>
+        <li><code>Year</code>: buckets keyed as <code>YYYY</code> using selected months.</li>
+        <li><code>Entire period</code>: a single bucket from selected start to end.</li>
+        <li><code>Compare</code>: Bucket A uses main start/end; Bucket B uses compare controls.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Contribution Decomposition (Shapley + Fisher)</h2>
+      <p>The exact contribution engine evaluates each parent using Shapley decomposition over a coalition objective built from Fisher chaining.</p>
+      <p>For parent <code>P</code>, selected child universe <code>U</code>, and coalition <code>S</code>:</p>
+      <div class="formula">g_i(S,t) = 1 + rel_i(t) if i in S; otherwise g_i(S,t) = 1</div>
+      <div class="formula">L_t(S) = sum_{i in U} N_{i,t-1} * g_i(S,t) / sum_{i in U} N_{i,t-1}</div>
+      <div class="formula">P_t(S) = sum_{i in U} N_{i,t} / sum_{i in U} (N_{i,t} / g_i(S,t))</div>
+      <div class="formula">F_t(S) = sqrt(L_t(S) * P_t(S))</div>
+      <div class="formula">v(S) = annualize(100 * (product_t F_t(S) - 1), n)</div>
+      <p>Shapley contribution for child <code>i</code>:</p>
+      <div class="formula">phi_i = sum_{S subseteq N\\{i}} (|S|! * (n-|S|-1)! / n!) * (v(S U {i}) - v(S))</div>
+      <p>For deeper descendants, local decompositions are projected recursively to the active-parent basis.</p>
+    </section>
+
+    <section>
+      <h2>Core Mode Behavior</h2>
+      <ul>
+        <li>Comparator-backed official top lines exist for:
+          <code>PCE (DPCCRG)</code>, <code>Goods (LA000062/IA000062)</code>, and <code>Services (LA000063/IA000063)</code>.
+        </li>
+        <li>When the active parent is comparator-backed and fully included, the top contribution uses the official comparator path.</li>
+        <li>Under user exclusions, top behavior becomes dynamic (selection-aware rebuild).</li>
+        <li>Any gap between parent and child sum is absorbed by residual via balancing identity.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Residual and Exclusions</h2>
+      <p>Residual is defined in the same bucket/value space:</p>
+      <div class="formula">Residual = Parent - sum(Children)</div>
+      <ul>
+        <li>Exclude semantics: checked checkbox means excluded.</li>
+        <li>For contribution, exclusions alter the selected universe used in decomposition.</li>
+        <li>Residual appears as a consolidated line in the table for contribution contexts (and can be zero).</li>
+        <li>Residual chart visibility is controlled by the residual exclude checkbox.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Precision, Rounding, and Small Differences</h2>
+      <ul>
+        <li>Internal calculations use floating-point arithmetic and multiple chained transforms.</li>
+        <li>Residual is normalized with a small tolerance before display.</li>
+        <li>Displayed values are rounded to 2 decimals, so identities can differ by rounding at display level.</li>
+        <li>Comparator-backed core paths and dynamic rebuild paths can diverge in ways that are methodologically intentional.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Known Scope Limits</h2>
+      <ul>
+        <li>This page documents implemented app behavior, not an official BEA methodology specification.</li>
+        <li>Where required data are unavailable or unstable, fallback behavior is used for robustness.</li>
+        <li>The decomposition engine is exact at local parent fanout via subset enumeration, with practical guardrails.</li>
+      </ul>
+    </section>
+
+    <p class="footer-note">
+      Source data: <a href="https://apps.bea.gov/iTable/?reqid=19&step=2&isuri=1&categories=underlying" target="_blank" rel="noopener noreferrer">BEA NIPA Underlying Detail Tables 2.4.4U and 2.4.5U</a>.
+    </p>
+  </div>
+</body>
+</html>
