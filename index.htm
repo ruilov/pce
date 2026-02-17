@@ -3913,6 +3913,51 @@
       };
     }
 
+    function computeCompareXAxisRange(rows) {
+      if (!Array.isArray(rows) || !rows.length) return null;
+      const values = [];
+      for (const row of rows) {
+        if (Number.isFinite(row && row.valueA)) values.push(Number(row.valueA));
+        if (Number.isFinite(row && row.valueB)) values.push(Number(row.valueB));
+      }
+      if (!values.length) return null;
+
+      let dataMin = Math.min(...values);
+      let dataMax = Math.max(...values);
+      const absMax = Math.max(Math.abs(dataMin), Math.abs(dataMax), 1);
+      let span = dataMax - dataMin;
+      const minSpan = absMax * 0.18;
+      if (!(span > 0)) {
+        span = minSpan;
+        dataMin -= (span / 2);
+        dataMax += (span / 2);
+      } else if (span < minSpan) {
+        const mid = (dataMin + dataMax) / 2;
+        span = minSpan;
+        dataMin = mid - (span / 2);
+        dataMax = mid + (span / 2);
+      }
+
+      const pad = Math.max(span * 0.12, absMax * 0.02, 0.05);
+      let min = dataMin - pad;
+      let max = dataMax + pad;
+
+      const crossesZero = min <= 0 && max >= 0;
+      const zeroDistance = dataMin > 0 ? dataMin : (dataMax < 0 ? Math.abs(dataMax) : 0);
+      const nearZeroThreshold = Math.max(span * 0.25, 0.5);
+      if (!crossesZero && zeroDistance <= nearZeroThreshold) {
+        min = Math.min(min, 0);
+        max = Math.max(max, 0);
+      }
+
+      if (!(max > min)) {
+        const mid = (min + max) / 2;
+        min = mid - 0.5;
+        max = mid + 0.5;
+      }
+      return { min, max };
+    }
+
     function buildCompareDumbbellOption(series, metricKey, buckets, model) {
       if (!Array.isArray(buckets) || buckets.length < 2) return null;
       const bucketA = buckets[0];
@@ -3938,6 +3983,7 @@
       if (!rows.length) return null;
       const residualIdx = rows.findIndex((r) => r.id === "residual-total");
       if (residualIdx >= 0) rows.push(rows.splice(residualIdx, 1)[0]);
+      const xRange = computeCompareXAxisRange(rows);
 
       const categories = rows.map((r) => r.label);
       const connectorData = [];
@@ -3946,7 +3992,7 @@
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         if (Number.isFinite(r.valueA) && Number.isFinite(r.valueB)) {
-          connectorData.push({ value: [i, r.valueA, r.valueB], rowIndex: i });
+          connectorData.push({ value: [r.valueA, i, r.valueB], rowIndex: i });
         }
         if (Number.isFinite(r.valueA)) pointAData.push({ value: [r.valueA, i], rowIndex: i });
         if (Number.isFinite(r.valueB)) pointBData.push({ value: [r.valueB, i], rowIndex: i });
@@ -3993,6 +4039,8 @@
         grid: { left: 210, right: 24, top: 36, bottom: 18 },
         xAxis: {
           type: "value",
+          min: xRange ? xRange.min : null,
+          max: xRange ? xRange.max : null,
           axisLabel: {
             color: "#a9b7cb",
             fontFamily: "JetBrains Mono, monospace",
@@ -4022,10 +4070,11 @@
             type: "custom",
             name: "Connector",
             silent: true,
+            encode: { x: [0, 2], y: 1 },
             data: connectorData,
             renderItem: (params, api) => {
-              const rowIdx = api.value(0);
-              const a = api.value(1);
+              const a = api.value(0);
+              const rowIdx = api.value(1);
               const b = api.value(2);
               const p1 = api.coord([a, rowIdx]);
               const p2 = api.coord([b, rowIdx]);
@@ -4556,6 +4605,5 @@
   </script>
 </body>
 </html>
-
 
 
