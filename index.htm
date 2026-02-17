@@ -581,6 +581,7 @@
       expanded: new Set(),
       chartSeriesCache: new Map(),
       plotSelectedByLine: new Map(),
+      plotResidualExcluded: true,
       plotStackOrderTopToBottom: [],
       plotStackOrderVersion: 0,
       activeParentLine: null,
@@ -2316,6 +2317,7 @@
         if (isExcludedInCore(line, model)) continue;
         out.push(`${line}:${selected ? 1 : 0}`);
       }
+      out.push(`residual:${state.plotResidualExcluded ? 1 : 0}`);
       out.sort();
       return out.join(",");
     }
@@ -3237,7 +3239,7 @@
         if (metricKey !== "contrib_pp") return null;
         return normalizeResidualDisplayValue(openResidualSums[i]);
       });
-      if (metricKey === "contrib_pp" && residualValues.some((v) => v !== null)) {
+      if (metricKey === "contrib_pp" && !state.plotResidualExcluded && residualValues.some((v) => v !== null)) {
         series.push({
           id: "residual-total",
           label: "Residual",
@@ -3390,8 +3392,8 @@
           hasChildren: false,
           isExpanded: false,
           isActiveParent: false,
-          plotSelectable: false,
-          plotSelected: false,
+          plotSelectable: true,
+          plotSelected: state.plotResidualExcluded,
           plotIndeterminate: false,
           componentLabel: "Residual",
           titleText: "Residual",
@@ -3467,10 +3469,14 @@
           formatter: (cell) => {
             const data = cell.getData();
             if (!data.plotSelectable) return "";
+            if (data.rowType === "residual_total") {
+              const action = "Exclude Residual from chart";
+              return `<input type="checkbox" class="plot-select" data-series-id="residual-total" data-indeterminate="0" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
+            }
+            if (data.rowType !== "component") return "";
             const action = (metricKey === "contrib_pp")
               ? `Exclude ${data.componentLabel || ""} from calculation`
               : `Exclude ${data.componentLabel || ""} from chart`;
-            if (data.rowType !== "component") return "";
             const indeterminateFlag = data.plotIndeterminate ? "1" : "0";
             return `<input type="checkbox" class="plot-select" data-line="${data.line}" data-indeterminate="${indeterminateFlag}" ${data.plotSelected ? "checked" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}" />`;
           },
@@ -4415,6 +4421,13 @@
     outEl.addEventListener("change", (ev) => {
       const cb = ev.target.closest("input.plot-select");
       if (!cb || !state.model) return;
+      const seriesId = String(cb.getAttribute("data-series-id") || "").trim();
+      if (seriesId === "residual-total") {
+        state.plotResidualExcluded = !!cb.checked;
+        state.chartSeriesCache = new Map();
+        renderPivot();
+        return;
+      }
       const line = Number(cb.getAttribute("data-line"));
       if (!Number.isFinite(line)) return;
       const targets = getPlotToggleTargets(state.model, line, { includeSelf: true });
