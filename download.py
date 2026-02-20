@@ -30,7 +30,7 @@ YEAR = "ALL"      # Full history
 TABLES = ["U20404", "U20405"]
 METADATA_DATASET = "APIDatasetMetaData"
 HIERARCHY_SOURCE_TABLE = "U20405"
-RETRIEVE_API_DATA = False  # False -> skip API calls and regenerate hierarchy from existing metadata CSV
+RETRIEVE_API_DATA = True  # False -> skip API calls and regenerate hierarchy from existing metadata CSV
 REQUEST_TIMEOUT_SECONDS = 120
 MAX_REQUEST_ATTEMPTS = 6
 BASE_BACKOFF_SECONDS = 2.0
@@ -38,12 +38,16 @@ MAX_BACKOFF_SECONDS = 90.0
 
 
 def load_api_key(key_file: Path) -> str:
-    env_key = os.getenv("BEA_API_KEY", "").strip()
+    def normalize_key(raw: str) -> str:
+        # Remove UTF-8 BOM if present and trim surrounding whitespace.
+        return str(raw or "").lstrip("\ufeff").strip()
+
+    env_key = normalize_key(os.getenv("BEA_API_KEY", ""))
     if env_key:
         return env_key
 
     try:
-        file_key = key_file.read_text(encoding="utf-8").strip()
+        file_key = normalize_key(key_file.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise RuntimeError(
             f"Missing BEA API key. Set BEA_API_KEY env var or create key file: {key_file}"
