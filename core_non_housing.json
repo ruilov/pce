@@ -1,0 +1,117 @@
+{
+  "schema": "pce-explorer-state",
+  "version": 2,
+  "exportedAt": "2026-02-21T22:56:33.240Z",
+  "dataset": {
+    "fingerprint": "24a20daa",
+    "details": {
+      "pricePath": "./NIUnderlyingDetail_U20404_freq-M_year-ALL.csv",
+      "nominalPath": "./NIUnderlyingDetail_U20405_freq-M_year-ALL.csv",
+      "hierarchyPath": "./NIUnderlyingDetail_hierarchy.csv",
+      "rootLine": 1,
+      "lineCount": 364,
+      "availableMonthsFirst": "1959M01",
+      "availableMonthsLast": "2025M12",
+      "availableMonthsCount": 804,
+      "rootNominalSeriesCode": "DPCERC",
+      "rootPriceSeriesCode": "DPCERG",
+      "rootSeriesChecksum": "e1a2697d"
+    }
+  },
+  "controls": {
+    "metric": "contrib_pp",
+    "grouping": "recent",
+    "indexMode": "headline",
+    "datePolicy": {
+      "main": {
+        "mode": "default"
+      },
+      "compare": {
+        "mode": "default"
+      }
+    }
+  },
+  "view": {
+    "activeParentLine": 1,
+    "expandedLines": [
+      1,
+      70,
+      149,
+      150,
+      161
+    ],
+    "plotResidualExcluded": true,
+    "plotSelectionByLine": {
+      "2": true,
+      "3": true,
+      "70": true,
+      "71": true,
+      "102": true,
+      "111": true,
+      "118": true,
+      "148": true,
+      "149": true,
+      "150": true,
+      "151": true,
+      "161": true,
+      "162": true,
+      "165": true,
+      "168": true,
+      "186": true,
+      "205": true,
+      "230": true,
+      "248": true,
+      "276": true,
+      "338": true,
+      "-1": true
+    },
+    "plotStackOrderTopToBottom": [
+      "line:151",
+      "line:-1",
+      "line:2",
+      "line:148"
+    ]
+  },
+  "breakout": {
+    "categories": [
+      {
+        "id": "cat_1",
+        "label": "Food and Energy",
+        "order": 0,
+        "parentKind": "line",
+        "parentLine": 1
+      }
+    ],
+    "reparents": {
+      "71": {
+        "targetLine": -1
+      },
+      "111": {
+        "targetLine": -1
+      },
+      "151": {
+        "targetLine": 1
+      },
+      "165": {
+        "targetLine": -1
+      }
+    },
+    "aliases": {
+      "2": "Core Goods",
+      "148": "Core Non-Housing Services"
+    },
+    "childOrders": {
+      "1": [
+        -1,
+        2,
+        148,
+        151
+      ],
+      "-1": [
+        165,
+        71,
+        111
+      ]
+    }
+  }
+}

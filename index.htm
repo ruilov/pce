@@ -686,6 +686,12 @@
         <option value="core">Core</option>
       </select>
     </label>
+    <label>View:
+      <select id="views">
+        <option value="custom">&lt;select&gt;</option>
+        <option value="core_non_housing">Core Non-Housing</option>
+      </select>
+    </label>
   </div>
 
   <div class="row compare-controls" id="compareControls" hidden>
@@ -734,6 +740,12 @@
       period: { label: "Entire period" },
       compare: { label: "Compare" },
     };
+    const VIEW_PRESETS = {
+      core_non_housing: {
+        label: "Core Non-Housing",
+        path: "./core_non_housing.json",
+      },
+    };
     const DEFAULT_COLUMN_MODE = "quarter";
     const MIN_SELECTABLE_YEAR = 1950;
     const MAX_SELECTABLE_YEAR = new Date().getFullYear() + 1;
@@ -753,6 +765,7 @@
     const metricEl = document.getElementById("metric");
     const columnsEl = document.getElementById("columns");
     const coreModeEl = document.getElementById("coreMode");
+    const viewsEl = document.getElementById("views");
     const compareControlsEl = document.getElementById("compareControls");
     const compareStartMonthEl = document.getElementById("compareStartMonth");
     const compareStartYearEl = document.getElementById("compareStartYear");
@@ -791,6 +804,9 @@
       defaultsInitializedFromData: false,
       isApplyingSnapshot: false,
       pendingSnapshotPayload: null,
+      pendingSnapshotSource: null,
+      selectedViewId: "custom",
+      viewPayloadCache: new Map(),
       seriesColorById: new Map(),
       tableInstance: null,
       tableColumnsSignature: "",
@@ -3051,6 +3067,85 @@
         }
       }
       downloadJsonText(text, suggestedName);
+      return true;
+    }
+
+    function getViewPreset(viewId) {
+      const key = String(viewId || "").trim();
+      if (!key || key === "custom") return null;
+      return VIEW_PRESETS[key] || null;
+    }
+
+    function isValidAppSnapshotEnvelope(payload) {
+      if (!payload || typeof payload !== "object") return false;
+      if (String(payload.schema || "") !== APP_SNAPSHOT_SCHEMA) return false;
+      if (Number(payload.version) !== APP_SNAPSHOT_VERSION) return false;
+      const controls = payload.controls && typeof payload.controls === "object" ? payload.controls : null;
+      if (!controls) return false;
+      const datePolicy = controls.datePolicy && typeof controls.datePolicy === "object" ? controls.datePolicy : null;
+      if (!datePolicy) return false;
+      const main = datePolicy.main && typeof datePolicy.main === "object" ? datePolicy.main : null;
+      const compare = datePolicy.compare && typeof datePolicy.compare === "object" ? datePolicy.compare : null;
+      if (!main || !compare) return false;
+      const mainMode = String(main.mode || "");
+      const compareMode = String(compare.mode || "");
+      return (mainMode === "default" || mainMode === "explicit")
+        && (compareMode === "default" || compareMode === "explicit");
+    }
+
+    async function loadViewPresetPayload(viewId) {
+      const key = String(viewId || "").trim();
+      const preset = getViewPreset(key);
+      if (!preset) throw new Error(`Unknown view preset: ${key || "(empty)"}`);
+      if (state.viewPayloadCache.has(key)) return state.viewPayloadCache.get(key);
+      const fetchCacheMode = DATA_LOAD_CONFIG.ENABLE_IN_MEMORY_CACHE ? undefined : DATA_LOAD_CONFIG.FETCH_CACHE_MODE_WHEN_OFF;
+      const url = toAbsoluteUrl(preset.path);
+      const text = await fetchCsvText(url, { fetchCacheMode });
+      let payload = null;
+      try {
+        payload = JSON.parse(String(text || "{}"));
+      } catch (err) {
+        throw new Error(`Invalid JSON for view "${preset.label}" (${preset.path}).`);
+      }
+      if (!payload || typeof payload !== "object") {
+        throw new Error(`Invalid snapshot payload for view "${preset.label}" (${preset.path}).`);
+      }
+      if (!isValidAppSnapshotEnvelope(payload)) {
+        throw new Error(`Invalid snapshot schema for view "${preset.label}" (${preset.path}).`);
+      }
+      state.viewPayloadCache.set(key, payload);
+      return payload;
+    }
+
+    async function applyViewPreset(viewId) {
+      const key = String(viewId || "").trim() || "custom";
+      if (key === "custom") {
+        if (!state.model && state.pendingSnapshotSource === "view_preset") {
+          state.pendingSnapshotPayload = null;
+          state.pendingSnapshotSource = null;
+        }
+        state.selectedViewId = "custom";
+        if (viewsEl) viewsEl.value = "custom";
+        return true;
+      }
+      const preset = getViewPreset(key);
+      if (!preset) throw new Error(`Unknown view preset: ${key}`);
+      const payload = await loadViewPresetPayload(key);
+      if (!state.model) {
+        state.pendingSnapshotPayload = payload;
+        state.pendingSnapshotSource = "view_preset";
+        state.selectedViewId = key;
+        if (viewsEl) viewsEl.value = key;
+        setStatus(`View queued: ${preset.label}. It will apply after data loads.`);
+        return true;
+      }
+      const ok = applyAppSnapshotPayload(payload, state.model);
+      if (!ok) {
+        throw new Error(`Failed to apply view "${preset.label}" from ${preset.path}.`);
+      }
+      state.selectedViewId = key;
+      if (viewsEl) viewsEl.value = key;
+      setStatus(`View applied: ${preset.label}.`);
       return true;
     }
 
@@ -6297,6 +6392,7 @@
         if (state.pendingSnapshotPayload) {
           const pending = state.pendingSnapshotPayload;
           state.pendingSnapshotPayload = null;
+          state.pendingSnapshotSource = null;
           const applied = applyAppSnapshotPayload(pending, model);
           if (!applied) {
             setError("Invalid page state file.");
@@ -6355,9 +6451,29 @@
     state.mainRangeUserEdited = false;
     columnsEl.value = DEFAULT_COLUMN_MODE;
     coreModeEl.value = state.coreMode;
+    state.selectedViewId = "custom";
+    if (viewsEl && [...viewsEl.options].some((opt) => opt.value === "custom")) {
+      viewsEl.value = "custom";
+    }
     updateCompareControlsVisibility();
     bindTableLayoutViewportWatcher();
     state.tableMobilePortrait = isMobilePortraitTableLayout();
+
+    if (viewsEl) {
+      viewsEl.addEventListener("change", async () => {
+        if (state.isApplyingSnapshot) return;
+        const prevViewId = String(state.selectedViewId || "custom");
+        const nextViewId = String(viewsEl.value || "custom");
+        try {
+          await applyViewPreset(nextViewId);
+        } catch (err) {
+          const fallbackViewId = getViewPreset(prevViewId) ? prevViewId : "custom";
+          state.selectedViewId = fallbackViewId;
+          viewsEl.value = fallbackViewId;
+          setError(err && err.message ? err.message : "Failed to load selected view.");
+        }
+      });
+    }
 
     metricEl.addEventListener("change", () => {
       if (state.isApplyingSnapshot) return;
@@ -6434,6 +6550,7 @@
             const payload = JSON.parse(String(text || "{}"));
             if (!state.model) {
               state.pendingSnapshotPayload = payload;
+              state.pendingSnapshotSource = "file_import";
               setStatus("Page state import queued; it will apply after data loads.");
               return;
             }
