@@ -631,6 +631,7 @@
     <label>Grouping:
       <select id="columns">
         <option value="month">Month</option>
+        <option value="recent">Recent</option>
         <option value="quarter">Quarter</option>
         <option value="year">Year</option>
         <option value="period">Entire period</option>
@@ -693,6 +694,7 @@
     };
     const COLUMN_MODES = {
       month: { label: "Month" },
+      recent: { label: "Recent" },
       quarter: { label: "Quarter" },
       year: { label: "Year" },
       period: { label: "Entire period" },
@@ -950,26 +952,36 @@
       return { y, mo };
     }
 
-    function findLatestRootMonthWithData(model) {
-      if (!model) return "";
+    function getAvailableRootMonths(model) {
+      if (!model) return [];
+      if (Array.isArray(model.availableRootMonths)) return [...model.availableRootMonths];
+
       const rootMeta = model.metaByLine.get(model.rootLine);
-      if (!rootMeta) return "";
+      if (!rootMeta) return [];
       const rootNominalCode = String(rootMeta.nominalSeriesCode || "").trim();
       const rootPriceCode = String(rootMeta.priceSeriesCode || "").trim();
-      if (!rootNominalCode || !rootPriceCode) return "";
+      if (!rootNominalCode || !rootPriceCode) return [];
 
       const nominalByTp = model.nominalBySeries.get(rootNominalCode);
       const priceByTp = model.priceBySeries.get(rootPriceCode);
-      if (!nominalByTp || !priceByTp) return "";
+      if (!nominalByTp || !priceByTp) return [];
 
-      let latestTp = "";
+      const months = [];
       for (const [tp, nominalVal] of nominalByTp.entries()) {
         if (nominalVal === null || nominalVal === undefined || Number.isNaN(nominalVal)) continue;
         const priceVal = priceByTp.get(tp);
         if (priceVal === null || priceVal === undefined || Number.isNaN(priceVal)) continue;
         if (!parseTimePeriod(tp)) continue;
-        if (!latestTp || tp > latestTp) latestTp = tp;
+        months.push(tp);
       }
+      months.sort();
+      model.availableRootMonths = months;
+      return [...months];
+    }
+
+    function findLatestRootMonthWithData(model) {
+      const months = getAvailableRootMonths(model);
+      const latestTp = months.length ? months[months.length - 1] : "";
       return latestTp ? timePeriodToYm(latestTp) : "";
     }
 
@@ -1069,6 +1081,51 @@
       if (month <= 6) return 2;
       if (month <= 9) return 3;
       return 4;
+    }
+
+    function shiftTimePeriod(tp, monthOffset) {
+      const parsed = parseTimePeriod(tp);
+      if (!parsed || !Number.isFinite(monthOffset)) return null;
+      const d = new Date(parsed.y, parsed.mo - 1 + Number(monthOffset), 1);
+      return makeTimePeriod(d.getFullYear(), d.getMonth() + 1);
+    }
+
+    function buildRecentBucketsFromEnd(allModelMonthsSorted, endTP) {
+      const availableMonths = (allModelMonthsSorted || []).filter((tp) => Boolean(parseTimePeriod(tp)));
+      if (!availableMonths.length) return [];
+      const availableSet = new Set(availableMonths);
+      const normalizedEnd = String(endTP || "").trim();
+      if (!availableSet.has(normalizedEnd)) return [];
+
+      const windows = [
+        { label: "1 month", size: 1 },
+        { label: "3 month", size: 3 },
+        { label: "6 month", size: 6 },
+        { label: "12 month", size: 12 },
+      ];
+      const out = [];
+      for (const window of windows) {
+        const startTP = shiftTimePeriod(normalizedEnd, -(window.size - 1));
+        if (!startTP) continue;
+        const bucketMonths = buildMonthRange(startTP, normalizedEnd);
+        if (bucketMonths.length !== window.size) continue;
+        let complete = true;
+        for (const tp of bucketMonths) {
+          if (!availableSet.has(tp)) {
+            complete = false;
+            break;
+          }
+        }
+        if (!complete) continue;
+        out.push({
+          id: `recent:${window.size}:${startTP}:${normalizedEnd}`,
+          label: window.label,
+          months: bucketMonths,
+          startYM: timePeriodToYm(startTP),
+          endYM: timePeriodToYm(normalizedEnd),
+        });
+      }
+      return out;
     }
 
     function buildPeriodBuckets(months, mode, startYM, endYM) {
@@ -4162,6 +4219,7 @@
       // which can leave small non-zero residuals. Include month so all contrib
       // grouping modes use the exact Fisher/Shapley bucket path.
       return state.columnMode === "month"
+        || state.columnMode === "recent"
         || state.columnMode === "quarter"
         || state.columnMode === "year"
         || state.columnMode === "period"
@@ -5755,6 +5813,29 @@
             role: "B",
           },
         ];
+      } else if (columnMode === "recent") {
+        if (!state.model) {
+          if (showErrors) {
+            setError("Recent grouping requires loaded data.");
+            setStatus("Error");
+          }
+          return null;
+        }
+        const endTPRecent = ymToTimePeriod(endYM);
+        const availableMonths = getAvailableRootMonths(state.model);
+        periodBuckets = buildRecentBucketsFromEnd(availableMonths, endTPRecent);
+        if (!periodBuckets.length) {
+          if (showErrors) {
+            setError("No recent buckets available for selected End month.");
+            setStatus("Error");
+          }
+          return null;
+        }
+        const usedMonths = new Set();
+        for (const bucket of periodBuckets) {
+          for (const tp of (bucket.months || [])) usedMonths.add(tp);
+        }
+        months = [...usedMonths].sort();
       } else {
         periodBuckets = buildPeriodBuckets(monthsA, columnMode, startYM, endYM);
         if (!periodBuckets.length) {
