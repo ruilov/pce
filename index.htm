@@ -43,12 +43,45 @@
         linear-gradient(160deg, #070b13 0%, var(--bg-0) 48%, #0d1524 100%);
       min-height: 100vh;
     }
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
     h1 {
-      margin: 0 0 14px;
+      margin: 0;
       font-size: 20px;
       font-weight: 700;
       letter-spacing: 0.25px;
       color: #eef5ff;
+    }
+    .title-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      min-height: 32px;
+      border-radius: 8px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-btn svg {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
     }
     .row {
       position: sticky;
@@ -70,25 +103,6 @@
       top: 86px;
       z-index: 19;
       margin-top: 0;
-    }
-    .breakout-controls {
-      top: 162px;
-      z-index: 18;
-      margin-top: 0;
-      gap: 8px;
-    }
-    .breakout-controls .breakout-title {
-      color: var(--text-2);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.22px;
-      text-transform: uppercase;
-      margin-right: 2px;
-    }
-    .breakout-controls button {
-      min-height: 30px;
-      padding: 5px 9px;
-      font-size: 12px;
     }
     .compare-controls[hidden] { display: none !important; }
     label {
@@ -589,6 +603,13 @@
     }
     @media (max-width: 760px) {
       body { padding: 12px; }
+      .title-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      .title-actions {
+        margin-left: auto;
+      }
       .row {
         position: static;
         padding: 10px;
@@ -611,7 +632,28 @@
   </style>
 </head>
 <body>
-  <h1>PCE Inflation Explorer</h1>
+  <div class="title-row">
+    <h1>PCE Inflation Explorer</h1>
+    <div class="title-actions" aria-label="Breakout utilities">
+      <button type="button" id="breakoutExportBtn" class="icon-btn" aria-label="Export breakout JSON" title="Export breakout JSON">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+          <path d="M8 3v5h8V3"></path>
+          <path d="M12 12v6"></path>
+          <path d="M9.5 15.5L12 18l2.5-2.5"></path>
+        </svg>
+      </button>
+      <button type="button" id="breakoutImportBtn" class="icon-btn" aria-label="Import breakout JSON" title="Import breakout JSON">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+          <path d="M12 3v12"></path>
+          <path d="M9.5 5.5L12 3l2.5 2.5"></path>
+          <path d="M8 13h8"></path>
+        </svg>
+      </button>
+      <input type="file" id="breakoutImportFile" accept="application/json,.json" hidden />
+    </div>
+  </div>
 
   <div class="row">
     <label class="month-year-label">Start (MM/YYYY):
@@ -656,14 +698,6 @@
       <select id="compareEndYear"></select>
     </label>
   </div>
-  <div class="row breakout-controls" id="breakoutControls">
-    <span class="breakout-title">Breakout</span>
-    <button type="button" id="breakoutExportBtn">Export Breakout</button>
-    <button type="button" id="breakoutImportBtn">Import Breakout</button>
-    <button type="button" id="breakoutResetBtn" title="Remove all custom categories and assignments">Reset</button>
-    <input type="file" id="breakoutImportFile" accept="application/json,.json" hidden />
-  </div>
-
   <div id="out"></div>
   <div id="breakoutContextMenu" class="breakout-context-menu" hidden aria-hidden="true"></div>
   <p class="source-note">
@@ -724,10 +758,8 @@
     const compareStartYearEl = document.getElementById("compareStartYear");
     const compareEndMonthEl = document.getElementById("compareEndMonth");
     const compareEndYearEl = document.getElementById("compareEndYear");
-    const breakoutControlsEl = document.getElementById("breakoutControls");
     const breakoutExportBtn = document.getElementById("breakoutExportBtn");
     const breakoutImportBtn = document.getElementById("breakoutImportBtn");
-    const breakoutResetBtn = document.getElementById("breakoutResetBtn");
     const breakoutImportFileEl = document.getElementById("breakoutImportFile");
     const breakoutContextMenuEl = document.getElementById("breakoutContextMenu");
 
@@ -873,9 +905,6 @@
       if (!compareControlsEl) return;
       const showCompare = isCompareGroupingSelected();
       compareControlsEl.hidden = !showCompare;
-      if (breakoutControlsEl) {
-        breakoutControlsEl.style.top = showCompare ? "162px" : "86px";
-      }
     }
 
     function getCompareYmRange() {
@@ -6138,14 +6167,6 @@
           }
         };
         reader.readAsText(file);
-      });
-    }
-    if (breakoutResetBtn) {
-      breakoutResetBtn.addEventListener("click", () => {
-        if (!hasActiveBreakoutStructure() && state.labelAliasesByLine.size === 0) return;
-        const ok = window.confirm("Reset breakout categories and assignments?");
-        if (!ok) return;
-        clearAllBreakoutState();
       });
     }
     if (state.breakoutContextMenuEl) {
