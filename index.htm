@@ -71,6 +71,25 @@
       z-index: 19;
       margin-top: 0;
     }
+    .breakout-controls {
+      top: 162px;
+      z-index: 18;
+      margin-top: 0;
+      gap: 8px;
+    }
+    .breakout-controls .breakout-title {
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.22px;
+      text-transform: uppercase;
+      margin-right: 2px;
+    }
+    .breakout-controls button {
+      min-height: 30px;
+      padding: 5px 9px;
+      font-size: 12px;
+    }
     .compare-controls[hidden] { display: none !important; }
     label {
       display: inline-flex;
@@ -323,6 +342,114 @@
       opacity: 0.75;
       text-decoration: none;
     }
+    .component-label-btn {
+      border: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 12px;
+      padding: 0;
+      margin: 0;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 4px;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .component-label-btn:hover:not(:disabled) {
+      color: var(--accent-2);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .component-label-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(94, 161, 255, 0.28);
+    }
+    .component-label-btn:disabled {
+      opacity: 0.75;
+      cursor: default;
+      text-decoration: none;
+    }
+    .breakout-inline-input {
+      border: 1px solid rgba(93, 150, 224, 0.8);
+      background: rgba(11, 22, 37, 0.92);
+      color: #dce9fa;
+      border-radius: 6px;
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1.2;
+      padding: 2px 6px;
+      height: 24px;
+      min-width: 120px;
+      max-width: 100%;
+    }
+    .breakout-context-menu {
+      position: fixed;
+      z-index: 1200;
+      min-width: 160px;
+      border: 1px solid rgba(58, 89, 126, 0.92);
+      border-radius: 8px;
+      background: rgba(12, 23, 38, 0.97);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.36);
+      padding: 5px;
+    }
+    .breakout-context-menu[hidden] {
+      display: none !important;
+    }
+    .breakout-context-item {
+      width: 100%;
+      display: block;
+      text-align: left;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #d4e2f8;
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1.2;
+      padding: 7px 8px;
+      cursor: pointer;
+    }
+    .breakout-context-item:hover:not(:disabled),
+    .breakout-context-item:focus-visible {
+      background: rgba(43, 77, 115, 0.72);
+      color: #eff7ff;
+      outline: none;
+    }
+    .breakout-context-item:disabled {
+      color: #7e8fa7;
+      cursor: default;
+      background: transparent;
+    }
+    .breakout-context-item.destructive {
+      color: #f3b3ba;
+    }
+    .breakout-drag-source {
+      cursor: grab;
+      user-select: none;
+    }
+    .breakout-drag-source.breakout-dragging {
+      opacity: 0.58;
+      cursor: grabbing;
+    }
+    .breakout-drop-target-line.breakout-drop-target {
+      box-shadow: inset 0 0 0 1px rgba(93, 163, 255, 0.78);
+      border-radius: 6px;
+      background: rgba(38, 68, 104, 0.34);
+    }
+    .breakout-drop-target-line.breakout-drop-target-before {
+      box-shadow: inset 0 2px 0 0 rgba(93, 163, 255, 0.95);
+      border-radius: 6px;
+      background: rgba(38, 68, 104, 0.22);
+    }
+    .breakout-drop-target-line.breakout-drop-target-after {
+      box-shadow: inset 0 -2px 0 0 rgba(93, 163, 255, 0.95);
+      border-radius: 6px;
+      background: rgba(38, 68, 104, 0.22);
+    }
     .component-header-wrap {
       display: inline-flex;
       align-items: center;
@@ -528,8 +655,16 @@
       <select id="compareEndYear"></select>
     </label>
   </div>
+  <div class="row breakout-controls" id="breakoutControls">
+    <span class="breakout-title">Breakout</span>
+    <button type="button" id="breakoutExportBtn">Export Breakout</button>
+    <button type="button" id="breakoutImportBtn">Import Breakout</button>
+    <button type="button" id="breakoutResetBtn" title="Remove all custom categories and assignments">Reset</button>
+    <input type="file" id="breakoutImportFile" accept="application/json,.json" hidden />
+  </div>
 
   <div id="out"></div>
+  <div id="breakoutContextMenu" class="breakout-context-menu" hidden aria-hidden="true"></div>
   <p class="source-note">
     Source data: <a href="https://apps.bea.gov/iTable/?reqid=19&step=2&isuri=1&categories=underlying" target="_blank" rel="noopener noreferrer">BEA NIPA Underlying Detail Tables 2.4.4U and 2.4.5U</a>.
     <!-- <a href="https://apps.bea.gov/iTable/?reqid=19&step=2&isuri=1&categories=underlying" target="_blank" rel="noopener noreferrer">Source: U.S. Bureau of Economic Analysis (BEA), National Income and Product Accounts (NIPA), Underlying Detail Tables 2.4.4U (Price Indexes for Personal Consumption Expenditures by Type of Product) and 2.4.5U (Personal Consumption Expenditures by Type of Product).</a> -->
@@ -587,9 +722,20 @@
     const compareStartYearEl = document.getElementById("compareStartYear");
     const compareEndMonthEl = document.getElementById("compareEndMonth");
     const compareEndYearEl = document.getElementById("compareEndYear");
+    const breakoutControlsEl = document.getElementById("breakoutControls");
+    const breakoutExportBtn = document.getElementById("breakoutExportBtn");
+    const breakoutImportBtn = document.getElementById("breakoutImportBtn");
+    const breakoutResetBtn = document.getElementById("breakoutResetBtn");
+    const breakoutImportFileEl = document.getElementById("breakoutImportFile");
+    const breakoutContextMenuEl = document.getElementById("breakoutContextMenu");
 
     const csvRowsCache = new Map();
     const RESIDUAL_ZERO_TOL = 1e-10;
+    const BREAKOUT_SCHEMA_VERSION = 5;
+    const BREAKOUT_V4_SCHEMA_VERSION = 4;
+    const BREAKOUT_V3_SCHEMA_VERSION = 3;
+    const BREAKOUT_V2_SCHEMA_VERSION = 2;
+    const BREAKOUT_LEGACY_SCHEMA_VERSION = 1;
     const state = {
       model: null,
       columnMode: DEFAULT_COLUMN_MODE,
@@ -625,6 +771,30 @@
       dragSeriesId: null,
       dragOverSeriesId: null,
       dragOverPlacement: null,
+      breakoutEnabled: false,
+      breakoutCategoriesByParent: new Map(),
+      breakoutCategoryByLine: new Map(),
+      breakoutCategoryLineById: new Map(),
+      reparentByLine: new Map(),
+      childOrderByParent: new Map(),
+      breakoutCategorySeq: 0,
+      breakoutVirtualLineSeq: 0,
+      breakoutVersion: 0,
+      breakoutDragLine: null,
+      breakoutDragOverTargetLine: null,
+      breakoutDragOverPlacement: null,
+      breakoutDragMode: null,
+      labelAliasesByLine: new Map(),
+      inlineEditLine: null,
+      inlineEditDraft: "",
+      inlineEditMode: "",
+      inlineEditCreatedCategoryLine: null,
+      inlineEditReturnFocusLine: null,
+      contextMenu: { open: false, x: 0, y: 0, line: null },
+      longPressTimer: null,
+      longPressLine: null,
+      longPressTriggered: false,
+      breakoutContextMenuEl: breakoutContextMenuEl || null,
     };
 
     function setStatus(s) {
@@ -699,7 +869,11 @@
 
     function updateCompareControlsVisibility() {
       if (!compareControlsEl) return;
-      compareControlsEl.hidden = !isCompareGroupingSelected();
+      const showCompare = isCompareGroupingSelected();
+      compareControlsEl.hidden = !showCompare;
+      if (breakoutControlsEl) {
+        breakoutControlsEl.style.top = showCompare ? "162px" : "86px";
+      }
     }
 
     function getCompareYmRange() {
@@ -1461,6 +1635,1091 @@
       return state.coreMode === "core";
     }
 
+    function clearModelComputationCaches(model) {
+      if (!model) return;
+      for (const key of Object.keys(model)) {
+        if (!/Cache$/.test(key)) continue;
+        const v = model[key];
+        if (v && typeof v.clear === "function") v.clear();
+      }
+    }
+
+    function hasActiveBreakoutStructure() {
+      return state.breakoutCategoryByLine.size > 0 || state.reparentByLine.size > 0;
+    }
+
+    function getRawChildOrderForParent(parentLine) {
+      const key = Number(parentLine);
+      if (!Number.isFinite(key)) return [];
+      const rows = state.childOrderByParent.get(key);
+      if (!Array.isArray(rows)) return [];
+      return rows.map((v) => Number(v)).filter(Number.isFinite);
+    }
+
+    function setChildOrderForParent(parentLine, orderRows) {
+      const key = Number(parentLine);
+      if (!Number.isFinite(key)) return false;
+      const next = [];
+      const seen = new Set();
+      for (const raw of (orderRows || [])) {
+        const v = Number(raw);
+        if (!Number.isFinite(v) || seen.has(v)) continue;
+        seen.add(v);
+        next.push(v);
+      }
+      if (!next.length) {
+        return state.childOrderByParent.delete(key);
+      }
+      state.childOrderByParent.set(key, next);
+      return true;
+    }
+
+    function removeChildFromParentOrder(parentLine, childLine) {
+      const parent = Number(parentLine);
+      const child = Number(childLine);
+      if (!Number.isFinite(parent) || !Number.isFinite(child)) return false;
+      const rows = getRawChildOrderForParent(parent);
+      if (!rows.length) return false;
+      const next = rows.filter((v) => v !== child);
+      if (next.length === rows.length) return false;
+      setChildOrderForParent(parent, next);
+      return true;
+    }
+
+    function upsertChildAtEndOfParentOrder(parentLine, childLine) {
+      const parent = Number(parentLine);
+      const child = Number(childLine);
+      if (!Number.isFinite(parent) || !Number.isFinite(child)) return false;
+      const rows = getRawChildOrderForParent(parent).filter((v) => v !== child);
+      rows.push(child);
+      setChildOrderForParent(parent, rows);
+      return true;
+    }
+
+    function incrementBreakoutVersion() {
+      state.breakoutVersion = (Number(state.breakoutVersion) || 0) + 1;
+      state.breakoutEnabled = hasActiveBreakoutStructure();
+      if (state.model) clearModelComputationCaches(state.model);
+      state.chartSeriesCache = new Map();
+    }
+
+    function isBreakoutCategoryLine(line) {
+      return Number.isFinite(line) && state.breakoutCategoryByLine.has(Number(line));
+    }
+
+    function isKnownTreeLine(model, line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return false;
+      return model.metaByLine.has(v) || isBreakoutCategoryLine(v);
+    }
+
+    function getBreakoutCategory(line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return null;
+      return state.breakoutCategoryByLine.get(v) || null;
+    }
+
+    function getBreakoutCategoriesForParent(parentLine) {
+      const key = Number(parentLine);
+      const rows = state.breakoutCategoriesByParent.get(key) || [];
+      return [...rows].sort((a, b) => {
+        const oa = Number.isFinite(a.order) ? a.order : 0;
+        const ob = Number.isFinite(b.order) ? b.order : 0;
+        if (oa !== ob) return oa - ob;
+        return a.line - b.line;
+      });
+    }
+
+    function canUseAsBreakoutParent(model, line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return false;
+      return model.metaByLine.has(v) || isBreakoutCategoryLine(v);
+    }
+
+    function allocateBreakoutCategoryLine() {
+      state.breakoutVirtualLineSeq = (Number(state.breakoutVirtualLineSeq) || 0) + 1;
+      return -state.breakoutVirtualLineSeq;
+    }
+
+    function nextBreakoutCategoryId() {
+      state.breakoutCategorySeq = (Number(state.breakoutCategorySeq) || 0) + 1;
+      return `cat_${state.breakoutCategorySeq}`;
+    }
+
+    function sanitizeBreakoutLabel(label, fallback = "Category") {
+      const clean = String(label || "").replace(/\s+/g, " ").trim();
+      return clean || fallback;
+    }
+
+    function sanitizeBreakoutCategoryId(id, fallback = "") {
+      const raw = String(id || "").trim();
+      const clean = raw.replace(/\s+/g, "_").replace(/[^A-Za-z0-9._:-]/g, "");
+      if (clean) return clean;
+      return String(fallback || "").trim();
+    }
+
+    function isAliasableLine(model, line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return false;
+      return model.metaByLine.has(v) || isBreakoutCategoryLine(v);
+    }
+
+    function getLineAlias(line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return "";
+      return String(state.labelAliasesByLine.get(v) || "");
+    }
+
+    function setLineAlias(model, line, label) {
+      if (!isAliasableLine(model, line)) return false;
+      const v = Number(line);
+      const clean = sanitizeBreakoutLabel(label, "");
+      if (!clean) return false;
+      state.labelAliasesByLine.set(v, clean);
+      incrementBreakoutVersion();
+      return true;
+    }
+
+    function clearLineAlias(line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return false;
+      const changed = state.labelAliasesByLine.delete(v);
+      if (changed) incrementBreakoutVersion();
+      return changed;
+    }
+
+    function clearInlineEditState({ keepFocusLine = false } = {}) {
+      const line = Number.isFinite(state.inlineEditLine) ? Number(state.inlineEditLine) : null;
+      state.inlineEditLine = null;
+      state.inlineEditDraft = "";
+      state.inlineEditMode = "";
+      state.inlineEditCreatedCategoryLine = null;
+      if (!keepFocusLine) state.inlineEditReturnFocusLine = null;
+      return line;
+    }
+
+    function focusLabelButtonForLine(line) {
+      if (!state.tableHostEl || !Number.isFinite(line)) return;
+      const sel = `[data-label-line="${line}"]`;
+      const el = state.tableHostEl.querySelector(sel);
+      if (el && typeof el.focus === "function") {
+        try { el.focus({ preventScroll: true }); } catch (_) { el.focus(); }
+      }
+    }
+
+    function focusInlineEditInputForLine(line) {
+      if (!state.tableHostEl || !Number.isFinite(line)) return;
+      const sel = `input.breakout-inline-input[data-inline-edit-line="${line}"]`;
+      const input = state.tableHostEl.querySelector(sel);
+      if (!input) return;
+      try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+      try { input.select(); } catch (_) {}
+    }
+
+    function beginInlineEdit(line, { mode = "rename", createdCategoryLine = null } = {}) {
+      if (!state.model || !isAliasableLine(state.model, line)) return false;
+      const targetLine = Number(line);
+      const existingAlias = getLineAlias(targetLine);
+      const baseLabel = getLineDisplayLabel(state.model, targetLine, "");
+      state.inlineEditLine = targetLine;
+      state.inlineEditDraft = existingAlias || baseLabel;
+      state.inlineEditMode = String(mode || "rename");
+      state.inlineEditCreatedCategoryLine = Number.isFinite(createdCategoryLine) ? Number(createdCategoryLine) : null;
+      state.inlineEditReturnFocusLine = targetLine;
+      closeBreakoutContextMenu();
+      renderPivot();
+      setTimeout(() => focusInlineEditInputForLine(targetLine), 0);
+      return true;
+    }
+
+    function commitInlineEdit() {
+      if (!state.model || !Number.isFinite(state.inlineEditLine)) return false;
+      const line = Number(state.inlineEditLine);
+      const raw = String(state.inlineEditDraft || "").trim();
+      const clean = sanitizeBreakoutLabel(raw, "");
+      if (!clean) {
+        cancelInlineEdit();
+        return false;
+      }
+      const mode = String(state.inlineEditMode || "").trim();
+      if (mode === "create" && isBreakoutCategoryLine(line)) {
+        const def = getBreakoutCategory(line);
+        if (def) {
+          const nextLabel = sanitizeBreakoutLabel(clean, def.label || "Category");
+          let changed = false;
+          if (def.label !== nextLabel) {
+            def.label = nextLabel;
+            changed = true;
+          }
+          if (state.labelAliasesByLine.delete(line)) changed = true;
+          if (changed) incrementBreakoutVersion();
+        } else {
+          setLineAlias(state.model, line, clean);
+        }
+      } else {
+        setLineAlias(state.model, line, clean);
+      }
+      clearInlineEditState({ keepFocusLine: true });
+      renderPivot();
+      setTimeout(() => focusLabelButtonForLine(line), 0);
+      return true;
+    }
+
+    function cancelInlineEdit() {
+      const line = clearInlineEditState({ keepFocusLine: true });
+      if (Number.isFinite(line)) {
+        renderPivot();
+        setTimeout(() => focusLabelButtonForLine(line), 0);
+      }
+      return true;
+    }
+
+    function closeBreakoutContextMenu() {
+      state.contextMenu.open = false;
+      state.contextMenu.line = null;
+      state.contextMenu.x = 0;
+      state.contextMenu.y = 0;
+      state.longPressTriggered = false;
+      state.longPressLine = null;
+      if (state.breakoutContextMenuEl) {
+        state.breakoutContextMenuEl.hidden = true;
+        state.breakoutContextMenuEl.setAttribute("aria-hidden", "true");
+        state.breakoutContextMenuEl.innerHTML = "";
+      }
+    }
+
+    function buildBreakoutContextMenuItems(model, line) {
+      const items = [];
+      const v = Number(line);
+      if (!isAliasableLine(model, v)) return items;
+      items.push({ key: "add_category", label: "Add category here", disabled: false });
+      items.push({ key: "rename", label: "Rename label", disabled: false });
+      items.push({ key: "reset", label: "Reset label", disabled: !getLineAlias(v) });
+      if (isBreakoutCategoryLine(v)) {
+        items.push({ key: "delete", label: "Delete category", disabled: false, destructive: true });
+      }
+      return items;
+    }
+
+    function positionBreakoutContextMenu(x, y) {
+      if (!state.breakoutContextMenuEl) return;
+      const el = state.breakoutContextMenuEl;
+      const margin = 8;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const rect = el.getBoundingClientRect();
+      let left = Number.isFinite(x) ? x : margin;
+      let top = Number.isFinite(y) ? y : margin;
+      if ((left + rect.width + margin) > vw) left = Math.max(margin, vw - rect.width - margin);
+      if ((top + rect.height + margin) > vh) top = Math.max(margin, vh - rect.height - margin);
+      el.style.left = `${Math.max(margin, left)}px`;
+      el.style.top = `${Math.max(margin, top)}px`;
+    }
+
+    function openBreakoutContextMenu({ line, x = 0, y = 0, anchorEl = null } = {}) {
+      if (!state.model || !state.breakoutContextMenuEl) return false;
+      const v = Number(line);
+      if (!isAliasableLine(state.model, v)) return false;
+      const items = buildBreakoutContextMenuItems(state.model, v);
+      if (!items.length) return false;
+
+      const html = items.map((item) => {
+        const cls = item.destructive ? "breakout-context-item destructive" : "breakout-context-item";
+        const disabled = item.disabled ? " disabled" : "";
+        return `<button type="button" class="${cls}" data-context-action="${escapeHtml(item.key)}" data-context-line="${v}"${disabled}>${escapeHtml(item.label)}</button>`;
+      }).join("");
+
+      const menu = state.breakoutContextMenuEl;
+      menu.innerHTML = html;
+      menu.hidden = false;
+      menu.setAttribute("aria-hidden", "false");
+      state.contextMenu.open = true;
+      state.contextMenu.line = v;
+
+      let px = Number(x);
+      let py = Number(y);
+      if ((!Number.isFinite(px) || !Number.isFinite(py)) && anchorEl) {
+        const rect = anchorEl.getBoundingClientRect();
+        px = rect.left + 8;
+        py = rect.bottom + 6;
+      }
+      if (!Number.isFinite(px)) px = 12;
+      if (!Number.isFinite(py)) py = 12;
+      state.contextMenu.x = px;
+      state.contextMenu.y = py;
+      positionBreakoutContextMenu(px, py);
+      return true;
+    }
+
+    function handleBreakoutContextMenuAction(action, line) {
+      if (!state.model) return;
+      const v = Number(line);
+      const key = String(action || "").trim();
+      if (!Number.isFinite(v)) return;
+      if (key === "add_category") {
+        closeBreakoutContextMenu();
+        const def = addBreakoutCategory(v, "New category");
+        if (!def) return;
+        ensureLineExpandedInDisplay(state.model, def.line);
+        incrementBreakoutVersion();
+        beginInlineEdit(def.line, { mode: "create", createdCategoryLine: def.line });
+        return;
+      }
+      if (key === "rename") {
+        beginInlineEdit(v, { mode: "rename" });
+        return;
+      }
+      if (key === "reset") {
+        clearLineAlias(v);
+        closeBreakoutContextMenu();
+        renderPivot();
+        setTimeout(() => focusLabelButtonForLine(v), 0);
+        return;
+      }
+      if (key === "delete" && isBreakoutCategoryLine(v)) {
+        closeBreakoutContextMenu();
+        const label = getLineDisplayLabel(state.model, v, "category");
+        const ok = window.confirm(`Delete breakout category "${label}" (including nested categories) and return its lines to the structural tree?`);
+        if (!ok) return;
+        deleteBreakoutCategory(v);
+      }
+    }
+
+    function ensureLineExpandedInDisplay(model, line) {
+      if (!model || !isKnownTreeLine(model, line)) return;
+      const seen = new Set();
+      let cur = Number(line);
+      while (isKnownTreeLine(model, cur) && !seen.has(cur)) {
+        seen.add(cur);
+        state.expanded.add(cur);
+        const parent = getEffectiveParentLine(model, cur);
+        if (!Number.isFinite(parent)) break;
+        cur = parent;
+      }
+    }
+
+    function addBreakoutCategory(parentLine, label, options = {}) {
+      const model = state.model;
+      if (!model || !canUseAsBreakoutParent(model, parentLine)) return null;
+      const id = sanitizeBreakoutCategoryId(options.id, "") || nextBreakoutCategoryId();
+      if (state.breakoutCategoryLineById.has(id)) return getBreakoutCategory(state.breakoutCategoryLineById.get(id));
+
+      const line = Number.isFinite(options.line) ? Number(options.line) : allocateBreakoutCategoryLine();
+      if (!(line < 0) || state.breakoutCategoryByLine.has(line)) return null;
+      if (model.metaByLine.has(line)) return null;
+
+      const cats = getBreakoutCategoriesForParent(parentLine);
+      const order = Number.isFinite(options.order)
+        ? Number(options.order)
+        : (cats.length ? (Math.max(...cats.map((c) => Number.isFinite(c.order) ? c.order : 0)) + 1) : 0);
+      const def = {
+        id,
+        label: sanitizeBreakoutLabel(label),
+        order,
+        line,
+        parentLine: Number(parentLine),
+      };
+
+      const next = [...cats, def].sort((a, b) => (a.order - b.order) || (a.line - b.line));
+      state.breakoutCategoriesByParent.set(def.parentLine, next);
+      state.breakoutCategoryByLine.set(def.line, def);
+      state.breakoutCategoryLineById.set(def.id, def.line);
+      state.breakoutVirtualLineSeq = Math.max(state.breakoutVirtualLineSeq, Math.abs(def.line));
+      return def;
+    }
+
+    function deleteBreakoutCategory(categoryLine) {
+      const root = getBreakoutCategory(categoryLine);
+      if (!root) return false;
+
+      const toDelete = new Set();
+      const stack = [Number(root.line)];
+      while (stack.length) {
+        const cur = Number(stack.pop());
+        if (!Number.isFinite(cur) || toDelete.has(cur) || !isBreakoutCategoryLine(cur)) continue;
+        toDelete.add(cur);
+        const childCats = getBreakoutCategoriesForParent(cur);
+        for (const child of childCats) stack.push(child.line);
+      }
+
+      for (const line of toDelete) {
+        const def = getBreakoutCategory(line);
+        if (!def) continue;
+        removeChildFromParentOrder(def.parentLine, def.line);
+        state.childOrderByParent.delete(def.line);
+        const siblings = getBreakoutCategoriesForParent(def.parentLine).filter((c) => c.line !== def.line);
+        if (siblings.length) state.breakoutCategoriesByParent.set(def.parentLine, siblings);
+        else state.breakoutCategoriesByParent.delete(def.parentLine);
+        state.breakoutCategoryByLine.delete(def.line);
+        state.breakoutCategoryLineById.delete(def.id);
+        state.plotSelectedByLine.delete(def.line);
+        state.labelAliasesByLine.delete(def.line);
+        state.expanded.delete(def.line);
+      }
+
+      if (Number.isFinite(state.inlineEditLine) && toDelete.has(Number(state.inlineEditLine))) {
+        clearInlineEditState();
+      }
+
+      for (const [line, entry] of [...state.reparentByLine.entries()]) {
+        const targetLine = getReparentTargetLine(entry);
+        if (Number.isFinite(targetLine) && toDelete.has(Number(targetLine))) {
+          state.reparentByLine.delete(line);
+        }
+      }
+      sanitizeChildOrderMapForModel(state.model);
+
+      incrementBreakoutVersion();
+      renderPivot();
+      return true;
+    }
+
+    function clearAllBreakoutState() {
+      for (const line of state.breakoutCategoryByLine.keys()) {
+        state.plotSelectedByLine.delete(line);
+        state.expanded.delete(line);
+        state.labelAliasesByLine.delete(line);
+      }
+      state.breakoutCategoriesByParent = new Map();
+      state.breakoutCategoryByLine = new Map();
+      state.breakoutCategoryLineById = new Map();
+      state.reparentByLine = new Map();
+      state.childOrderByParent = new Map();
+      clearInlineEditState();
+      incrementBreakoutVersion();
+      if (state.model) renderPivot();
+    }
+
+    function getStructuralParentLine(model, line) {
+      if (!model || !model.metaByLine.has(line)) return null;
+      const meta = model.metaByLine.get(line);
+      if (!meta || meta.parent === null || !model.metaByLine.has(meta.parent)) return null;
+      return meta.parent;
+    }
+
+    function isNodeInLineSubtreeByStructure(model, nodeLine, line) {
+      const node = Number(nodeLine);
+      const ancestorLine = Number(line);
+      if (!Number.isFinite(node) || !Number.isFinite(ancestorLine)) return false;
+      const seen = new Set();
+      let cur = node;
+      while (Number.isFinite(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        if (cur === ancestorLine) return true;
+        if (isBreakoutCategoryLine(cur)) {
+          const def = getBreakoutCategory(cur);
+          if (!def) break;
+          cur = Number(def.parentLine);
+          continue;
+        }
+        if (!model.metaByLine.has(cur)) break;
+        cur = getStructuralParentLine(model, cur);
+      }
+      return false;
+    }
+
+    function getReparentTargetLine(entry) {
+      if (!entry || typeof entry !== "object") return null;
+      if (Number.isFinite(Number(entry.targetLine))) return Number(entry.targetLine);
+      if (Number.isFinite(Number(entry.categoryLine))) return Number(entry.categoryLine);
+      return null;
+    }
+
+    function hasValidReparentOverride(model, line) {
+      if (!model || !model.metaByLine.has(line)) return false;
+      if (line === model.rootLine) return false;
+      const entry = state.reparentByLine.get(Number(line));
+      const targetLine = getReparentTargetLine(entry);
+      if (!Number.isFinite(targetLine)) return false;
+      if (!isKnownTreeLine(model, targetLine)) return false;
+      if (targetLine === Number(line)) return false;
+      if (isNodeInLineSubtreeByStructure(model, targetLine, line)) return false;
+      return true;
+    }
+
+    function getEffectiveParentLine(model, line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return null;
+      if (isBreakoutCategoryLine(v)) {
+        const def = getBreakoutCategory(v);
+        return def ? Number(def.parentLine) : null;
+      }
+      if (!model.metaByLine.has(v)) return null;
+      if (hasValidReparentOverride(model, v)) {
+        const targetLine = getReparentTargetLine(state.reparentByLine.get(v));
+        return Number(targetLine);
+      }
+      return getStructuralParentLine(model, v);
+    }
+
+    function hasAssignedAncestorToTarget(model, line, targetLine) {
+      const seen = new Set();
+      let cur = getStructuralParentLine(model, line);
+      while (Number.isFinite(cur) && model.metaByLine.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        const t = getReparentTargetLine(state.reparentByLine.get(cur));
+        if (Number.isFinite(t) && Number(t) === Number(targetLine) && hasValidReparentOverride(model, cur)) {
+          return true;
+        }
+        cur = getStructuralParentLine(model, cur);
+      }
+      return false;
+    }
+
+    function getAssignedRootsForTarget(model, targetLine) {
+      const out = [];
+      if (!model || !isKnownTreeLine(model, targetLine)) return out;
+      for (const [line, entry] of state.reparentByLine.entries()) {
+        const sourceLine = Number(line);
+        if (!Number.isFinite(sourceLine) || !model.metaByLine.has(sourceLine)) continue;
+        const entryTarget = getReparentTargetLine(entry);
+        if (!Number.isFinite(entryTarget) || Number(entryTarget) !== Number(targetLine)) continue;
+        if (!hasValidReparentOverride(model, sourceLine)) continue;
+        if (isExcludedInCore(sourceLine, model)) continue;
+        if (hasAssignedAncestorToTarget(model, sourceLine, targetLine)) continue;
+        out.push(sourceLine);
+      }
+      out.sort((a, b) => a - b);
+      return out;
+    }
+
+    function getEffectiveChildrenForLine(model, line) {
+      const v = Number(line);
+      if (!Number.isFinite(v)) return [];
+      if (isBreakoutCategoryLine(v)) {
+        const assignedRoots = getAssignedRootsForTarget(model, v);
+        const categories = getBreakoutCategoriesForParent(v).map((def) => def.line);
+        return [...assignedRoots, ...categories];
+      }
+      if (!model.metaByLine.has(v)) return [];
+
+      const structural = getIncludedChildren(model, v);
+      const baseChildren = structural.filter((child) => !hasValidReparentOverride(model, child));
+      const reassignedRoots = getAssignedRootsForTarget(model, v);
+      const categories = getBreakoutCategoriesForParent(v).map((def) => def.line);
+      return [...baseChildren, ...reassignedRoots, ...categories];
+    }
+
+    function getOrderedEffectiveChildrenForLine(model, line) {
+      const children = getEffectiveChildrenForLine(model, line);
+      if (!children.length) return children;
+      const preferred = getRawChildOrderForParent(line);
+      if (!preferred.length) return children;
+      const valid = new Set(children);
+      const out = [];
+      const seen = new Set();
+      for (const child of preferred) {
+        if (!valid.has(child) || seen.has(child)) continue;
+        seen.add(child);
+        out.push(child);
+      }
+      for (const child of children) {
+        if (seen.has(child)) continue;
+        out.push(child);
+      }
+      return out;
+    }
+
+    function sanitizeChildOrderMapForModel(model) {
+      const next = new Map();
+      for (const [parentRaw, rows] of state.childOrderByParent.entries()) {
+        const parentLine = Number(parentRaw);
+        if (!isKnownTreeLine(model, parentLine)) continue;
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const validChildren = new Set(getEffectiveChildrenForLine(model, parentLine));
+        if (!validChildren.size) continue;
+        const cleaned = [];
+        const seen = new Set();
+        for (const raw of rows) {
+          const child = Number(raw);
+          if (!Number.isFinite(child) || seen.has(child) || !validChildren.has(child)) continue;
+          seen.add(child);
+          cleaned.push(child);
+        }
+        if (cleaned.length) next.set(parentLine, cleaned);
+      }
+      state.childOrderByParent = next;
+    }
+
+    function isLineAffectedByReparentSubtree(model, line) {
+      if (!model || !model.metaByLine.has(line)) return false;
+      if (!state.reparentByLine.size) return false;
+      if (!model.breakoutAffectedLineCache || typeof model.breakoutAffectedLineCache.has !== "function") {
+        model.breakoutAffectedLineCache = new Map();
+      }
+      const key = `${line}|bo:${state.breakoutVersion}|core:${isCoreEnabled() ? 1 : 0}`;
+      if (model.breakoutAffectedLineCache.has(key)) return model.breakoutAffectedLineCache.get(key);
+      let affected = false;
+      for (const [sourceRaw, entry] of state.reparentByLine.entries()) {
+        const sourceLine = Number(sourceRaw);
+        if (!Number.isFinite(sourceLine) || !model.metaByLine.has(sourceLine)) continue;
+        const targetLine = getReparentTargetLine(entry);
+        if (!Number.isFinite(targetLine) || !isKnownTreeLine(model, targetLine)) continue;
+        const wasIn = isDescendantOrSelf(model, sourceLine, line);
+        const isIn = isDescendantOrSelfInDisplay(model, sourceLine, line);
+        if (wasIn !== isIn) {
+          affected = true;
+          break;
+        }
+      }
+      model.breakoutAffectedLineCache.set(key, affected);
+      return affected;
+    }
+
+    function isDescendantOrSelfInDisplay(model, line, ancestorLine) {
+      const target = Number(line);
+      const ancestor = Number(ancestorLine);
+      if (!Number.isFinite(target) || !Number.isFinite(ancestor)) return false;
+      if (target === ancestor) return true;
+      const seen = new Set();
+      let cur = target;
+      while (isKnownTreeLine(model, cur) && !seen.has(cur)) {
+        seen.add(cur);
+        const parent = getEffectiveParentLine(model, cur);
+        if (!Number.isFinite(parent)) break;
+        if (parent === ancestor) return true;
+        cur = parent;
+      }
+      return false;
+    }
+
+    function canReparentNode(model, sourceLine, targetLine) {
+      const source = Number(sourceLine);
+      const target = Number(targetLine);
+      if (!model || !isKnownTreeLine(model, source)) return false;
+      if (source === model.rootLine) return false;
+      if (!isKnownTreeLine(model, target)) return false;
+      if (source === target) return false;
+      if (isDescendantOrSelfInDisplay(model, target, source)) return false;
+      return true;
+    }
+
+    function setNodeParentOverride(model, sourceLine, targetLine) {
+      if (!canReparentNode(model, sourceLine, targetLine)) return false;
+      const source = Number(sourceLine);
+      const target = Number(targetLine);
+      const prevParent = getEffectiveParentLine(model, source);
+      if (Number.isFinite(prevParent) && prevParent === target) return false;
+      if (isBreakoutCategoryLine(source)) {
+        const def = getBreakoutCategory(source);
+        if (!def) return false;
+        const prevCategoryParent = Number(def.parentLine);
+        const oldSiblings = getBreakoutCategoriesForParent(prevCategoryParent).filter((c) => c.line !== source);
+        if (oldSiblings.length) state.breakoutCategoriesByParent.set(prevCategoryParent, oldSiblings);
+        else state.breakoutCategoriesByParent.delete(prevCategoryParent);
+        def.parentLine = target;
+        const nextSiblings = [...getBreakoutCategoriesForParent(target), def].sort((a, b) => {
+          const oa = Number.isFinite(a.order) ? a.order : 0;
+          const ob = Number.isFinite(b.order) ? b.order : 0;
+          if (oa !== ob) return oa - ob;
+          return a.line - b.line;
+        });
+        state.breakoutCategoriesByParent.set(target, nextSiblings);
+      } else {
+        state.reparentByLine.set(source, { targetLine: target });
+      }
+      if (Number.isFinite(prevParent)) {
+        removeChildFromParentOrder(prevParent, source);
+      }
+      upsertChildAtEndOfParentOrder(target, source);
+      sanitizeChildOrderMapForModel(model);
+      ensureLineExpandedInDisplay(model, target);
+      incrementBreakoutVersion();
+      renderPivot();
+      return true;
+    }
+
+    function sanitizeBreakoutStateForModel(model) {
+      if (!model) return;
+
+      const candidateByLine = new Map();
+      let maxSeq = 0;
+      let maxIdSeq = Number(state.breakoutCategorySeq) || 0;
+      const addCandidate = (item, parentFallback = null) => {
+        if (!item) return;
+        const line = Number(item.line);
+        if (!Number.isFinite(line) || !(line < 0) || model.metaByLine.has(line)) return;
+        if (candidateByLine.has(line)) return;
+        const parentLine = Number.isFinite(Number(item.parentLine))
+          ? Number(item.parentLine)
+          : Number(parentFallback);
+        if (!Number.isFinite(parentLine)) return;
+        const rawId = sanitizeBreakoutCategoryId(item.id, "");
+        const id = rawId || `cat_auto_${Math.abs(line)}`;
+        const order = Number.isFinite(Number(item.order)) ? Number(item.order) : 0;
+        const label = sanitizeBreakoutLabel(item.label, "Category");
+        candidateByLine.set(line, {
+          line,
+          id,
+          label,
+          order,
+          parentLine,
+        });
+        maxSeq = Math.max(maxSeq, Math.abs(line));
+        const idMatch = /^cat_(\d+)$/.exec(id);
+        if (idMatch) maxIdSeq = Math.max(maxIdSeq, Number(idMatch[1]));
+      };
+
+      for (const item of state.breakoutCategoryByLine.values()) addCandidate(item);
+      for (const [parentRaw, categories] of state.breakoutCategoriesByParent.entries()) {
+        const parentLine = Number(parentRaw);
+        for (const item of (categories || [])) addCandidate(item, parentLine);
+      }
+
+      const pending = new Map(candidateByLine.entries());
+      const validCategoryByLine = new Map();
+      const validCategoryLineById = new Map();
+      let progress = true;
+      while (pending.size && progress) {
+        progress = false;
+        for (const [line, candidate] of [...pending.entries()]) {
+          const parentLine = Number(candidate.parentLine);
+          if (model.metaByLine.has(parentLine)) {
+          } else if (validCategoryByLine.has(parentLine)) {
+          } else {
+            continue;
+          }
+          let id = sanitizeBreakoutCategoryId(candidate.id, `cat_auto_${Math.abs(line)}`);
+          if (validCategoryLineById.has(id)) {
+            do {
+              maxIdSeq += 1;
+              id = `cat_${maxIdSeq}`;
+            } while (validCategoryLineById.has(id));
+          }
+          const idMatch = /^cat_(\d+)$/.exec(id);
+          if (idMatch) maxIdSeq = Math.max(maxIdSeq, Number(idMatch[1]));
+          validCategoryByLine.set(line, {
+            id,
+            line,
+            label: sanitizeBreakoutLabel(candidate.label, "Category"),
+            order: Number.isFinite(candidate.order) ? candidate.order : 0,
+            parentLine,
+          });
+          validCategoryLineById.set(id, line);
+          pending.delete(line);
+          progress = true;
+        }
+      }
+
+      const validCategoriesByParent = new Map();
+      for (const def of validCategoryByLine.values()) {
+        const key = Number(def.parentLine);
+        const rows = validCategoriesByParent.get(key) || [];
+        rows.push(def);
+        validCategoriesByParent.set(key, rows);
+      }
+      for (const [key, rows] of validCategoriesByParent.entries()) {
+        rows.sort((a, b) => {
+          const oa = Number.isFinite(a.order) ? a.order : 0;
+          const ob = Number.isFinite(b.order) ? b.order : 0;
+          if (oa !== ob) return oa - ob;
+          return a.line - b.line;
+        });
+        validCategoriesByParent.set(key, rows);
+      }
+
+      const sourceReparents = new Map();
+      for (const [sourceRaw, entry] of state.reparentByLine.entries()) {
+        sourceReparents.set(sourceRaw, entry);
+      }
+
+      const validReparents = new Map();
+      for (const [sourceRaw, entry] of sourceReparents.entries()) {
+        const sourceLine = Number(sourceRaw);
+        if (!model.metaByLine.has(sourceLine)) continue;
+        if (sourceLine === model.rootLine) continue;
+        const targetLine = getReparentTargetLine(entry);
+        if (!Number.isFinite(targetLine)) continue;
+        if (!isKnownTreeLine(model, targetLine)) continue;
+        if (sourceLine === targetLine) continue;
+        validReparents.set(sourceLine, { targetLine: Number(targetLine) });
+      }
+
+      state.breakoutCategoriesByParent = validCategoriesByParent;
+      state.breakoutCategoryByLine = validCategoryByLine;
+      state.breakoutCategoryLineById = validCategoryLineById;
+      state.reparentByLine = validReparents;
+      state.breakoutVirtualLineSeq = maxSeq;
+      state.breakoutCategorySeq = maxIdSeq;
+      state.breakoutEnabled = hasActiveBreakoutStructure();
+
+      for (const [sourceLine, entry] of [...state.reparentByLine.entries()]) {
+        const targetLine = getReparentTargetLine(entry);
+        if (!Number.isFinite(targetLine)) {
+          state.reparentByLine.delete(sourceLine);
+          continue;
+        }
+        if (isDescendantOrSelfInDisplay(model, targetLine, sourceLine)) {
+          state.reparentByLine.delete(sourceLine);
+        }
+      }
+      sanitizeChildOrderMapForModel(model);
+
+      const nextSelection = new Map();
+      for (const [lineRaw, selected] of state.plotSelectedByLine.entries()) {
+        const line = Number(lineRaw);
+        if (!Number.isFinite(line)) continue;
+        if (model.metaByLine.has(line) || validCategoryByLine.has(line)) {
+          nextSelection.set(line, Boolean(selected));
+        }
+      }
+      state.plotSelectedByLine = nextSelection;
+
+      const nextAliases = new Map();
+      for (const [lineRaw, alias] of state.labelAliasesByLine.entries()) {
+        const line = Number(lineRaw);
+        if (!Number.isFinite(line)) continue;
+        const clean = sanitizeBreakoutLabel(alias, "");
+        if (!clean) continue;
+        if (model.metaByLine.has(line) || validCategoryByLine.has(line)) {
+          nextAliases.set(line, clean);
+        }
+      }
+      state.labelAliasesByLine = nextAliases;
+
+      if (state.contextMenu.open && !isAliasableLine(model, state.contextMenu.line)) {
+        closeBreakoutContextMenu();
+      }
+      if (Number.isFinite(state.inlineEditLine) && !isAliasableLine(model, state.inlineEditLine)) {
+        clearInlineEditState();
+      }
+    }
+
+    function buildBreakoutExportPayload(model) {
+      const categories = [...state.breakoutCategoryByLine.values()]
+        .sort((a, b) => {
+          if (a.parentLine !== b.parentLine) return a.parentLine - b.parentLine;
+          const oa = Number.isFinite(a.order) ? a.order : 0;
+          const ob = Number.isFinite(b.order) ? b.order : 0;
+          if (oa !== ob) return oa - ob;
+          return a.line - b.line;
+        })
+        .map((def) => {
+          const parentLine = Number(def.parentLine);
+          const parentDef = getBreakoutCategory(parentLine);
+          const base = {
+            id: def.id,
+            label: def.label,
+            order: def.order,
+          };
+          if (parentDef) {
+            base.parentKind = "category";
+            base.parentCategoryId = parentDef.id;
+          } else {
+            base.parentKind = "line";
+            base.parentLine = parentLine;
+          }
+          return base;
+        });
+
+      const reparents = {};
+      for (const [line, entry] of state.reparentByLine.entries()) {
+        if (!model.metaByLine.has(line)) continue;
+        if (!entry || !hasValidReparentOverride(model, line)) continue;
+        const targetLine = getReparentTargetLine(entry);
+        if (!Number.isFinite(targetLine)) continue;
+        reparents[String(line)] = {
+          targetLine: Number(targetLine),
+        };
+      }
+
+      const aliases = {};
+      for (const [line, alias] of state.labelAliasesByLine.entries()) {
+        const v = Number(line);
+        const clean = sanitizeBreakoutLabel(alias, "");
+        if (!Number.isFinite(v) || !clean) continue;
+        if (!isAliasableLine(model, v)) continue;
+        aliases[String(v)] = clean;
+      }
+
+      const childOrders = {};
+      for (const [parentRaw, rows] of state.childOrderByParent.entries()) {
+        const parentLine = Number(parentRaw);
+        if (!Number.isFinite(parentLine) || !isKnownTreeLine(model, parentLine)) continue;
+        if (!Array.isArray(rows) || !rows.length) continue;
+        const cleaned = rows.map((v) => Number(v)).filter(Number.isFinite);
+        if (!cleaned.length) continue;
+        childOrders[String(parentLine)] = cleaned;
+      }
+
+      return {
+        version: BREAKOUT_SCHEMA_VERSION,
+        categories,
+        reparents,
+        aliases,
+        childOrders,
+      };
+    }
+
+    function applyBreakoutImportPayload(payload, model) {
+      if (!model || !payload) return false;
+      const version = Number(payload.version);
+      if (
+        version !== BREAKOUT_SCHEMA_VERSION
+        && version !== BREAKOUT_V4_SCHEMA_VERSION
+        && version !== BREAKOUT_V3_SCHEMA_VERSION
+        && version !== BREAKOUT_V2_SCHEMA_VERSION
+        && version !== BREAKOUT_LEGACY_SCHEMA_VERSION
+      ) return false;
+      const reparentsPayload = payload.reparents && typeof payload.reparents === "object"
+        ? payload.reparents
+        : {};
+      const assignmentsPayload = payload.assignments && typeof payload.assignments === "object"
+        ? payload.assignments
+        : {};
+      const aliases = payload.aliases && typeof payload.aliases === "object"
+        ? payload.aliases
+        : {};
+      const childOrdersPayload = payload.childOrders && typeof payload.childOrders === "object"
+        ? payload.childOrders
+        : {};
+
+      const previousSelection = state.plotSelectedByLine;
+      state.breakoutCategoriesByParent = new Map();
+      state.breakoutCategoryByLine = new Map();
+      state.breakoutCategoryLineById = new Map();
+      state.reparentByLine = new Map();
+      state.childOrderByParent = new Map();
+      state.labelAliasesByLine = new Map();
+      state.plotSelectedByLine = new Map([...previousSelection.entries()].filter(([line]) => model.metaByLine.has(Number(line))));
+      state.breakoutVirtualLineSeq = 0;
+      state.breakoutCategorySeq = 0;
+
+      const categoryRows = [];
+      if (version === BREAKOUT_SCHEMA_VERSION || version === BREAKOUT_V4_SCHEMA_VERSION || version === BREAKOUT_V3_SCHEMA_VERSION) {
+        const rows = Array.isArray(payload.categories) ? payload.categories : [];
+        for (const row of rows) {
+          if (!row || typeof row !== "object") continue;
+          categoryRows.push({
+            id: sanitizeBreakoutCategoryId(row.id, ""),
+            label: sanitizeBreakoutLabel(row.label, "Category"),
+            order: Number.isFinite(Number(row.order)) ? Number(row.order) : 0,
+            parentKind: String(row.parentKind || "line"),
+            parentLine: Number(row.parentLine),
+            parentCategoryId: sanitizeBreakoutCategoryId(row.parentCategoryId, ""),
+          });
+        }
+      } else {
+        const catsByAnchor = payload.categoriesByAnchor && typeof payload.categoriesByAnchor === "object"
+          ? payload.categoriesByAnchor
+          : {};
+        for (const [anchorRaw, list] of Object.entries(catsByAnchor)) {
+          const anchorLine = Number(anchorRaw);
+          if (!model.metaByLine.has(anchorLine) || !Array.isArray(list)) continue;
+          const rows = [...list].sort((a, b) => {
+            const oa = Number.isFinite(Number(a && a.order)) ? Number(a.order) : 0;
+            const ob = Number.isFinite(Number(b && b.order)) ? Number(b.order) : 0;
+            return oa - ob;
+          });
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i] || {};
+            categoryRows.push({
+              id: sanitizeBreakoutCategoryId(row.id, ""),
+              label: sanitizeBreakoutLabel(row.label, "Category"),
+              order: Number.isFinite(Number(row.order)) ? Number(row.order) : i,
+              parentKind: "line",
+              parentLine: anchorLine,
+              parentCategoryId: "",
+            });
+          }
+        }
+      }
+
+      const categoryLineById = new Map();
+      const pending = [...categoryRows];
+      let importProgress = true;
+      while (pending.length && importProgress) {
+        importProgress = false;
+        for (let i = pending.length - 1; i >= 0; i--) {
+          const row = pending[i];
+          let parentLine = null;
+          if (row.parentKind === "category") {
+            if (!row.parentCategoryId) continue;
+            const mapped = categoryLineById.get(row.parentCategoryId);
+            if (!Number.isFinite(mapped)) continue;
+            parentLine = mapped;
+          } else {
+            if (!model.metaByLine.has(row.parentLine)) continue;
+            parentLine = row.parentLine;
+          }
+          const def = addBreakoutCategory(parentLine, row.label, {
+            id: row.id,
+            order: row.order,
+          });
+          if (!def) {
+            pending.splice(i, 1);
+            continue;
+          }
+          categoryLineById.set(def.id, def.line);
+          pending.splice(i, 1);
+          importProgress = true;
+        }
+      }
+
+      const nextReparents = new Map();
+      if (version === BREAKOUT_SCHEMA_VERSION || version === BREAKOUT_V4_SCHEMA_VERSION) {
+        for (const [sourceRaw, row] of Object.entries(reparentsPayload)) {
+          const sourceLine = Number(sourceRaw);
+          if (!model.metaByLine.has(sourceLine) || !row) continue;
+          const targetLine = Number(row.targetLine);
+          if (!Number.isFinite(targetLine)) continue;
+          if (!canReparentNode(model, sourceLine, targetLine)) continue;
+          nextReparents.set(sourceLine, { targetLine });
+        }
+      }
+      for (const [sourceRaw, row] of Object.entries(assignmentsPayload)) {
+        const sourceLine = Number(sourceRaw);
+        if (!model.metaByLine.has(sourceLine) || !row) continue;
+        const categoryLine = categoryLineById.get(String(row.categoryId || ""));
+        if (!Number.isFinite(categoryLine)) continue;
+        if (!canReparentNode(model, sourceLine, categoryLine)) continue;
+        nextReparents.set(sourceLine, { targetLine: categoryLine });
+      }
+      state.reparentByLine = nextReparents;
+
+      if (version === BREAKOUT_SCHEMA_VERSION) {
+        for (const [parentRaw, rows] of Object.entries(childOrdersPayload)) {
+          const parentLine = Number(parentRaw);
+          if (!Number.isFinite(parentLine) || !Array.isArray(rows)) continue;
+          const cleaned = [];
+          const seen = new Set();
+          for (const raw of rows) {
+            const line = Number(raw);
+            if (!Number.isFinite(line) || seen.has(line)) continue;
+            seen.add(line);
+            cleaned.push(line);
+          }
+          if (cleaned.length) state.childOrderByParent.set(parentLine, cleaned);
+        }
+      }
+
+      for (const [lineRaw, aliasRaw] of Object.entries(aliases)) {
+        const line = Number(lineRaw);
+        const alias = sanitizeBreakoutLabel(aliasRaw, "");
+        if (!Number.isFinite(line) || !alias) continue;
+        if (!isAliasableLine(model, line)) continue;
+        state.labelAliasesByLine.set(line, alias);
+      }
+
+      sanitizeBreakoutStateForModel(model);
+      incrementBreakoutVersion();
+      renderPivot();
+      return true;
+    }
+
+    function getLineDisplayLabel(model, line, fallback = "") {
+      const v = Number(line);
+      const alias = getLineAlias(v);
+      if (alias) return alias;
+      if (isBreakoutCategoryLine(v)) {
+        const def = getBreakoutCategory(v);
+        return def ? def.label : "Category";
+      }
+      const meta = model.metaByLine.get(v);
+      if (meta && meta.desc) return String(meta.desc);
+      return fallback || `Line ${v}`;
+    }
+
     function getNominalLevelValue(model, line, tp) {
       const meta = model.metaByLine.get(line);
       return getSeriesValueByCode(model.nominalBySeries, meta ? meta.nominalSeriesCode : null, tp);
@@ -1630,9 +2889,9 @@
       const activeParentLine = getActiveParentLine(model);
       const next = new Set();
       for (const line of state.expanded) {
-        if (!model.metaByLine.has(line)) continue;
-        if (!isDescendantOrSelf(model, line, activeParentLine)) continue;
-        if (isExcludedInCore(line, model)) continue;
+        if (!isKnownTreeLine(model, line)) continue;
+        if (!isDescendantOrSelfInDisplay(model, line, activeParentLine)) continue;
+        if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
         next.add(line);
       }
       next.add(activeParentLine);
@@ -1771,7 +3030,7 @@
         return direct;
       }
 
-      const children = getIncludedChildren(model, line);
+      const children = getEffectiveChildrenForLine(model, line);
       if (!children.length) {
         const leafVal = computeDirectCoreContributionToBasis(model, line, basisParentLine, tp);
         model.reconstructedCoreContributionCache.set(key, leafVal);
@@ -1961,6 +3220,9 @@
       if (line !== activeParentLine) {
         return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
       }
+      if (isCustomizedContainerLine(model, line)) {
+        return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
+      }
       const spec = getCoreComparatorSpec(line);
       if (!spec) {
         return computeReconstructedCoreContribution(model, line, activeParentLine, tp);
@@ -2006,6 +3268,14 @@
     }
 
     function computeMetricValue(metricKey, line, tp, model) {
+      if (isBreakoutCategoryLine(line)) {
+        if (metricKey === "weight_pct" || metricKey === "contrib_pp") {
+          const children = getEffectiveChildrenForLine(model, line);
+          const values = children.map((child) => computeMetricValue(metricKey, child, tp, model));
+          return sumNonNull(values);
+        }
+        return null;
+      }
       const meta = model.metaByLine.get(line);
       if (!meta) return null;
 
@@ -2028,6 +3298,13 @@
 
       if (metricKey === "contrib_pp") {
         const activeParentLine = getActiveParentLine(model);
+        if (isCustomizedContainerLine(model, line)) {
+          const children = getEffectiveChildrenForLine(model, line);
+          if (!children.length) return 0;
+          const childValues = children.map((child) => computeMetricValue(metricKey, child, tp, model));
+          const summed = sumNonNull(childValues);
+          return summed === null ? 0 : summed;
+        }
         if (isCoreEnabled()) {
           if (line === activeParentLine) {
             return computeCoreTopContributionValue(model, line, tp, activeParentLine);
@@ -2087,7 +3364,7 @@
     function computeBucketMetricValue(metricKey, line, bucket, model) {
       const activeParentLine = getActiveParentLine(model);
       const selectionSig = metricKey === "contrib_pp" ? buildSelectionSignatureForModel(model) : "";
-      const key = `${metricKey}|${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}`;
+      const key = `${metricKey}|${line}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}|bo:${state.breakoutVersion}`;
       if (model.bucketMetricCache.has(key)) return model.bucketMetricCache.get(key);
 
       let out = null;
@@ -2097,6 +3374,10 @@
         const selectionSig = buildSelectionSignatureForModel(model);
         const selectionCtx = buildContributionSelectionContext(model, plotStateCache, selectionSig);
         out = computeSelectedContributionBucketValue(model, line, bucket, plotStateCache, null, selectionSig, selectionCtx);
+      } else if (isBreakoutCategoryLine(line) && metricKey === "weight_pct") {
+        const children = getEffectiveChildrenForLine(model, line);
+        const childValues = children.map((child) => computeBucketMetricValue(metricKey, child, bucket, model));
+        out = sumNonNull(childValues);
       } else {
         const monthly = bucket.months.map((tp) => computeMetricValue(metricKey, line, tp, model));
         if (metricKey === "mom_pct") {
@@ -2105,6 +3386,14 @@
           out = meanNonNull(monthly);
         } else if (metricKey === "price_level" || metricKey === "nominal_level") {
           out = lastNonNull(monthly);
+        }
+        if (metricKey === "weight_pct" && model.metaByLine.has(line) && hasActiveBreakoutStructure()) {
+          const effectiveChildren = getEffectiveChildrenForLine(model, line);
+          if (effectiveChildren.length) {
+            const childValues = effectiveChildren.map((child) => computeBucketMetricValue(metricKey, child, bucket, model));
+            const sumChildren = sumNonNull(childValues);
+            if (sumChildren !== null) out = sumChildren;
+          }
         }
       }
 
@@ -2115,7 +3404,7 @@
     function computeResidualBucketValue(parentLine, bucket, model) {
       const activeParentLine = getActiveParentLine(model);
       const selectionSig = buildSelectionSignatureForModel(model);
-      const key = `${parentLine}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}`;
+      const key = `${parentLine}|${bucket.id}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|sel:${selectionSig}|bo:${state.breakoutVersion}`;
       if (model.bucketResidualCache.has(key)) return model.bucketResidualCache.get(key);
 
       if (!shouldShowResidualForLine(model, parentLine, "contrib_pp")) {
@@ -2123,7 +3412,7 @@
         return null;
       }
 
-      const children = getIncludedChildren(model, parentLine);
+      const children = getEffectiveChildrenForLine(model, parentLine);
       if (!children.length) {
         model.bucketResidualCache.set(key, null);
         return null;
@@ -2155,9 +3444,9 @@
       for (const row of visibleRows || []) {
         if (!row || row.type !== "component") continue;
         const line = Number(row.line);
-        if (!Number.isFinite(line) || seen.has(line)) continue;
+        if (!Number.isFinite(line) || seen.has(line) || !model.metaByLine.has(line)) continue;
         if (!state.expanded.has(line)) continue;
-        const children = getIncludedChildren(model, line);
+        const children = getEffectiveChildrenForLine(model, line);
         if (!children.length) continue;
         if (!shouldShowResidualForLine(model, line, metricKey)) continue;
         seen.add(line);
@@ -2170,12 +3459,24 @@
       const out = [];
       const activeParentLine = getActiveParentLine(model);
       const walk = (line, depth) => {
-        if (isExcludedInCore(line, model)) return;
-        const meta = model.metaByLine.get(line);
+        if (model.metaByLine.has(line) && isExcludedInCore(line, model)) return;
+        if (!isKnownTreeLine(model, line)) return;
+        const isCategory = isBreakoutCategoryLine(line);
+        const meta = isCategory
+          ? {
+            line,
+            parent: getEffectiveParentLine(model, line),
+            tier: null,
+            path: "",
+            desc: getLineDisplayLabel(model, line, "Category"),
+            nominalSeriesCode: "",
+            priceSeriesCode: "",
+          }
+          : model.metaByLine.get(line);
         if (!meta) return;
-        out.push({ type: "component", line, depth, meta });
+        out.push({ type: "component", line, depth, meta, isCategory });
         if (!state.expanded.has(line)) return;
-        const children = getIncludedChildren(model, line);
+        const children = getOrderedEffectiveChildrenForLine(model, line);
         for (const child of children) walk(child, depth + 1);
       };
       walk(activeParentLine, 0);
@@ -2271,14 +3572,14 @@
 
     function getPlotToggleTargets(model, line, { includeSelf = true } = {}) {
       const out = [];
-      if (!model || !model.metaByLine.has(line)) return out;
+      if (!model || !isKnownTreeLine(model, line)) return out;
       const seen = new Set();
       const walk = (cur) => {
-        if (!model.metaByLine.has(cur)) return;
+        if (!isKnownTreeLine(model, cur)) return;
         if (seen.has(cur)) return;
         seen.add(cur);
         out.push(cur);
-        const children = getIncludedChildren(model, cur);
+        const children = getEffectiveChildrenForLine(model, cur);
         for (const child of children) walk(child);
       };
       walk(line);
@@ -2309,7 +3610,7 @@
     function prunePlotSelectionToModel(model) {
       const next = new Map();
       for (const [line, selected] of state.plotSelectedByLine.entries()) {
-        if (model.metaByLine.has(line)) next.set(line, selected);
+        if (model.metaByLine.has(line) || isBreakoutCategoryLine(line)) next.set(line, selected);
       }
       state.plotSelectedByLine = next;
     }
@@ -2330,11 +3631,12 @@
     function buildSelectionSignatureForModel(model) {
       const out = [];
       for (const [line, selected] of state.plotSelectedByLine.entries()) {
-        if (!model.metaByLine.has(line)) continue;
-        if (isExcludedInCore(line, model)) continue;
+        if (!model.metaByLine.has(line) && !isBreakoutCategoryLine(line)) continue;
+        if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
         out.push(`${line}:${selected ? 1 : 0}`);
       }
       out.push(`residual:${state.plotResidualExcluded ? 1 : 0}`);
+      out.push(`breakout:${state.breakoutVersion}`);
       out.sort();
       return out.join(",");
     }
@@ -2480,11 +3782,91 @@
       return ((clientY - rect.top) > (rect.height / 2)) ? "after" : "before";
     }
 
+    function applyBreakoutDragIndicators() {
+      if (!state.tableHostEl) return;
+      const targets = state.tableHostEl.querySelectorAll(".breakout-drop-target-line");
+      for (const el of targets) {
+        const targetLine = Number(el.getAttribute("data-breakout-target-line"));
+        const isTarget = Number.isFinite(targetLine) && targetLine === state.breakoutDragOverTargetLine;
+        const isReorder = isTarget && state.breakoutDragMode === "reorder";
+        el.classList.toggle("breakout-drop-target", isTarget && state.breakoutDragMode !== "reorder");
+        el.classList.toggle("breakout-drop-target-before", isReorder && state.breakoutDragOverPlacement === "before");
+        el.classList.toggle("breakout-drop-target-after", isReorder && state.breakoutDragOverPlacement === "after");
+      }
+      const sources = state.tableHostEl.querySelectorAll(".breakout-drag-source");
+      for (const el of sources) {
+        const line = Number(el.getAttribute("data-breakout-line"));
+        const isDragging = Number.isFinite(line) && line === state.breakoutDragLine;
+        el.classList.toggle("breakout-dragging", isDragging);
+      }
+    }
+
+    function clearBreakoutDragState() {
+      state.breakoutDragLine = null;
+      state.breakoutDragOverTargetLine = null;
+      state.breakoutDragOverPlacement = null;
+      state.breakoutDragMode = null;
+      applyBreakoutDragIndicators();
+    }
+
+    function getBreakoutDragIntent(model, sourceLine, targetEl, targetLine, clientY) {
+      const source = Number(sourceLine);
+      const target = Number(targetLine);
+      if (!Number.isFinite(source) || !Number.isFinite(target) || !isKnownTreeLine(model, target)) return null;
+
+      const sourceParent = getEffectiveParentLine(model, source);
+      const targetParent = getEffectiveParentLine(model, target);
+      const sameParent = Number.isFinite(sourceParent) && sourceParent === targetParent;
+      const canReparent = canReparentNode(model, source, target);
+
+      if (sameParent && source !== target) {
+        const rect = targetEl.getBoundingClientRect();
+        const y = Number(clientY);
+        if (Number.isFinite(rect.height) && rect.height > 0 && Number.isFinite(y)) {
+          const localY = y - rect.top;
+          const edgeBand = Math.max(5, Math.min(12, rect.height * 0.3));
+          if (localY <= edgeBand) {
+            return { mode: "reorder", placement: "before", targetLine: target };
+          }
+          if (localY >= (rect.height - edgeBand)) {
+            return { mode: "reorder", placement: "after", targetLine: target };
+          }
+        }
+      }
+
+      if (canReparent) {
+        return { mode: "reparent", placement: "on", targetLine: target };
+      }
+      return null;
+    }
+
+    function applySiblingReorder(model, sourceLine, targetLine, placement) {
+      const source = Number(sourceLine);
+      const target = Number(targetLine);
+      const place = String(placement || "").toLowerCase();
+      if (!Number.isFinite(source) || !Number.isFinite(target)) return false;
+      if (place !== "before" && place !== "after") return false;
+      const parentLine = getEffectiveParentLine(model, target);
+      if (!Number.isFinite(parentLine)) return false;
+      const siblings = getOrderedEffectiveChildrenForLine(model, parentLine);
+      if (!siblings.includes(source) || !siblings.includes(target)) return false;
+      const without = siblings.filter((v) => v !== source);
+      const targetIdx = without.indexOf(target);
+      if (targetIdx < 0) return false;
+      const insertIdx = place === "after" ? (targetIdx + 1) : targetIdx;
+      without.splice(insertIdx, 0, source);
+      setChildOrderForParent(parentLine, without);
+      sanitizeChildOrderMapForModel(model);
+      incrementBreakoutVersion();
+      renderPivot();
+      return true;
+    }
+
     function getChartExpandedSet(model, expandedSet, metricKey) {
       const out = new Set();
       for (const line of (expandedSet || [])) {
-        if (!model.metaByLine.has(line)) continue;
-        if (isExcludedInCore(line, model)) continue;
+        if (!isKnownTreeLine(model, line)) continue;
+        if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
         out.add(line);
       }
       return out;
@@ -2494,11 +3876,10 @@
       const out = [];
       const activeParentLine = getActiveParentLine(model);
       const walk = (line) => {
-        if (isExcludedInCore(line, model)) return;
-        const children = model.childrenByParent.get(line) || [];
-        const includedChildren = children.filter((child) => !isExcludedInCore(child, model));
-        if (expandedSet.has(line) && includedChildren.length > 0) {
-          for (const child of includedChildren) walk(child);
+        if (model.metaByLine.has(line) && isExcludedInCore(line, model)) return;
+        const children = getOrderedEffectiveChildrenForLine(model, line);
+        if (expandedSet.has(line) && children.length > 0) {
+          for (const child of children) walk(child);
         } else {
           out.push(line);
         }
@@ -2616,8 +3997,7 @@
       for (const line of expandedSet) {
         if (!model.metaByLine.has(line)) continue;
         if (isExcludedInCore(line, model)) continue;
-        const children = (model.childrenByParent.get(line) || [])
-          .filter((child) => !isExcludedInCore(child, model));
+        const children = getEffectiveChildrenForLine(model, line);
         if (children.length > 0) out.push(line);
       }
       out.sort((a, b) => a - b);
@@ -2644,7 +4024,7 @@
         return baseNom;
       }
 
-      const children = getIncludedChildren(model, line);
+      const children = getEffectiveChildrenForLine(model, line);
       if (!children.length) {
         model.selectedNominalAggregateCache.set(key, baseNom);
         return baseNom;
@@ -2725,6 +4105,19 @@
         return 0;
       }
 
+      if (isCustomizedContainerLine(model, line)) {
+        const children = getEffectiveChildrenForLine(model, line);
+        if (!children.length) {
+          model.selectedContributionMonthlyCache.set(key, 0);
+          return 0;
+        }
+        const childValues = children.map((child) => computeSelectedContributionMonthly(model, child, tp, selectionCtx));
+        const childSum = sumNonNull(childValues);
+        const out = childSum === null ? 0 : childSum;
+        model.selectedContributionMonthlyCache.set(key, out);
+        return out;
+      }
+
       // Fast path: with no user exclusions under the active parent, use baseline math.
       if (selectionCtx.activeSelectionState === "checked") {
         const baseline = computeMetricValue("contrib_pp", line, tp, model);
@@ -2733,7 +4126,7 @@
       }
 
       const activeParentLine = selectionCtx.activeParentLine;
-      const children = getIncludedChildren(model, line);
+      const children = getEffectiveChildrenForLine(model, line);
       const shouldRecurse = (selectionState === "indeterminate")
         || (selectionCtx.coreEnabled && needsCoreReconstructionForLine(model, line, activeParentLine));
       if (shouldRecurse && children.length) {
@@ -2745,7 +4138,13 @@
         }
       }
 
-      if (selectionCtx.coreEnabled && line === activeParentLine && selectionState === "checked" && getCoreComparatorSpec(line)) {
+      if (
+        selectionCtx.coreEnabled
+        && line === activeParentLine
+        && selectionState === "checked"
+        && getCoreComparatorSpec(line)
+        && !isCustomizedContainerLine(model, line)
+      ) {
         const official = computeOfficialComparableContribution(model, line, tp);
         if (official !== null && official !== undefined && !Number.isNaN(official)) {
           model.selectedContributionMonthlyCache.set(key, official);
@@ -3081,17 +4480,23 @@
 
     function computeSelectedContributionBucketValueExact(model, line, bucket, selectionCtx) {
       if (!model || !model.metaByLine.has(line)) return null;
-      if (line === selectionCtx.activeParentLine && selectionCtx.coreEnabled && selectionCtx.activeSelectionState === "checked" && getCoreComparatorSpec(line)) {
+      if (
+        line === selectionCtx.activeParentLine
+        && selectionCtx.coreEnabled
+        && selectionCtx.activeSelectionState === "checked"
+        && getCoreComparatorSpec(line)
+        && !isCustomizedContainerLine(model, line)
+      ) {
         const officialTop = computeOfficialComparableBucketRate(model, line, bucket);
         if (Number.isFinite(officialTop)) return officialTop;
       }
       return computeSelectedContributionBucketValueDynamic(model, line, bucket, selectionCtx);
     }
 
-    function computeSelectedContributionBucketValue(model, line, bucket, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
+    function computeSelectedContributionBucketValueStructural(model, line, bucket, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
       const ctx = selectionCtx || buildContributionSelectionContext(model, plotStateCache, selectionSig);
       const cacheSuffix = getSelectedContributionCacheSuffix(ctx);
-      const key = `${line}|${bucket.id}|contrib_selected_bucket|${cacheSuffix}`;
+      const key = `${line}|${bucket.id}|contrib_selected_bucket_struct|${cacheSuffix}|bo:${state.breakoutVersion}`;
       if (model.selectedContributionBucketCache.has(key)) return model.selectedContributionBucketCache.get(key);
 
       let out = null;
@@ -3105,10 +4510,69 @@
       return out;
     }
 
-    function computeSelectedResidualBucketValue(parentLine, bucket, model, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
+    function isCustomizedContainerLine(model, line) {
+      if (!model) return false;
+      if (isBreakoutCategoryLine(line)) return true;
+      if (!hasActiveBreakoutStructure()) return false;
+      if (!model.metaByLine.has(line)) return false;
+      if (isLineAffectedByReparentSubtree(model, line)) return true;
+      const effectiveChildren = getEffectiveChildrenForLine(model, line);
+      const structuralChildren = getIncludedChildren(model, line);
+      if (effectiveChildren.length !== structuralChildren.length) return true;
+      if (effectiveChildren.some((child) => isBreakoutCategoryLine(child))) return true;
+      for (let i = 0; i < effectiveChildren.length; i++) {
+        if (effectiveChildren[i] !== structuralChildren[i]) return true;
+      }
+      return false;
+    }
+
+    function computeSelectedContributionBucketValue(model, line, bucket, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
       const ctx = selectionCtx || buildContributionSelectionContext(model, plotStateCache, selectionSig);
       const cacheSuffix = getSelectedContributionCacheSuffix(ctx);
-      const key = `${parentLine}|${bucket.id}|selected_resid|${cacheSuffix}`;
+      const key = `${line}|${bucket.id}|contrib_selected_bucket_effective|${cacheSuffix}|bo:${state.breakoutVersion}`;
+      if (model.selectedContributionBucketCache.has(key)) return model.selectedContributionBucketCache.get(key);
+
+      let out = null;
+      const selectionState = getPlotSelectionStateForLine(model, line, ctx.plotStateCache);
+      if (selectionState === "unchecked") {
+        out = 0;
+      } else if (isBreakoutCategoryLine(line) || isCustomizedContainerLine(model, line)) {
+        const children = getEffectiveChildrenForLine(model, line);
+        if (!children.length) {
+          out = 0;
+        } else {
+          const childValues = children.map((child) => computeSelectedContributionBucketValue(
+            model,
+            child,
+            bucket,
+            plotStateCache,
+            splitMemo,
+            selectionSig,
+            ctx
+          ));
+          out = sumNonNull(childValues);
+          if (out === null) out = 0;
+        }
+      } else {
+        out = computeSelectedContributionBucketValueStructural(
+          model,
+          line,
+          bucket,
+          plotStateCache,
+          splitMemo,
+          selectionSig,
+          ctx
+        );
+      }
+
+      model.selectedContributionBucketCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedResidualBucketValueStructural(parentLine, bucket, model, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
+      const ctx = selectionCtx || buildContributionSelectionContext(model, plotStateCache, selectionSig);
+      const cacheSuffix = getSelectedContributionCacheSuffix(ctx);
+      const key = `${parentLine}|${bucket.id}|selected_resid_struct|${cacheSuffix}|bo:${state.breakoutVersion}`;
       if (model.selectedBucketResidualCache.has(key)) return model.selectedBucketResidualCache.get(key);
 
       if (!shouldShowResidualForLine(model, parentLine, "contrib_pp")) {
@@ -3121,7 +4585,7 @@
         return 0;
       }
 
-      const parentVal = computeSelectedContributionBucketValue(model, parentLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
+      const parentVal = computeSelectedContributionBucketValueStructural(model, parentLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
       if (parentVal === null || parentVal === undefined || Number.isNaN(parentVal)) {
         model.selectedBucketResidualCache.set(key, null);
         return null;
@@ -3129,8 +4593,43 @@
 
       let sumChildren = 0;
       for (const childLine of children) {
-        const v = computeSelectedContributionBucketValue(model, childLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
+        const v = computeSelectedContributionBucketValueStructural(model, childLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
         if (v === null || v === undefined || Number.isNaN(v)) continue;
+        sumChildren += v;
+      }
+
+      const rawResidual = parentVal - sumChildren;
+      const out = normalizeResidualDisplayValue(rawResidual);
+      model.selectedBucketResidualCache.set(key, out);
+      return out;
+    }
+
+    function computeSelectedResidualBucketValue(parentLine, bucket, model, plotStateCache, splitMemo, selectionSig = "", selectionCtx = null) {
+      const ctx = selectionCtx || buildContributionSelectionContext(model, plotStateCache, selectionSig);
+      const cacheSuffix = getSelectedContributionCacheSuffix(ctx);
+      const key = `${parentLine}|${bucket.id}|selected_resid_effective|${cacheSuffix}|bo:${state.breakoutVersion}`;
+      if (model.selectedBucketResidualCache.has(key)) return model.selectedBucketResidualCache.get(key);
+
+      if (!shouldShowResidualForLine(model, parentLine, "contrib_pp")) {
+        model.selectedBucketResidualCache.set(key, null);
+        return null;
+      }
+      const children = getEffectiveChildrenForLine(model, parentLine);
+      if (!children.length) {
+        model.selectedBucketResidualCache.set(key, 0);
+        return 0;
+      }
+
+      const parentVal = computeSelectedContributionBucketValue(model, parentLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
+      if (!Number.isFinite(parentVal)) {
+        model.selectedBucketResidualCache.set(key, null);
+        return null;
+      }
+
+      let sumChildren = 0;
+      for (const childLine of children) {
+        const v = computeSelectedContributionBucketValue(model, childLine, bucket, plotStateCache, splitMemo, selectionSig, ctx);
+        if (!Number.isFinite(v)) continue;
         sumChildren += v;
       }
 
@@ -3159,7 +4658,7 @@
         return out;
       }
 
-      const children = getIncludedChildren(model, line);
+      const children = getEffectiveChildrenForLine(model, line);
       if (!children.length) {
         const out = isLineSelectedForPlot(line)
           ? { selected: total, deselected: null }
@@ -3195,7 +4694,7 @@
       const expansionSig = [...effectiveExpandedSet].sort((a, b) => a - b).join(",");
       const bucketSig = periodBuckets.map((b) => b.id).join("|");
       const selectionSig = buildSelectionSignatureForModel(model);
-      const cacheKey = `${metricKey}|${state.columnMode}|${bucketSig}|${expansionSig}|${selectionSig}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}`;
+      const cacheKey = `${metricKey}|${state.columnMode}|${bucketSig}|${expansionSig}|${selectionSig}|ap:${activeParentLine}|core:${isCoreEnabled() ? 1 : 0}|bo:${state.breakoutVersion}`;
       if (state.chartSeriesCache.has(cacheKey)) return state.chartSeriesCache.get(cacheKey);
 
       const series = [];
@@ -3206,8 +4705,10 @@
         ? buildContributionSelectionContext(model, plotStateCache, selectionSig)
         : null;
       for (const line of frontierLines) {
-        const meta = model.metaByLine.get(line);
-        if (!meta) continue;
+        const isCategory = isBreakoutCategoryLine(line);
+        const meta = isCategory ? null : model.metaByLine.get(line);
+        if (!isCategory && !meta) continue;
+        const label = getLineDisplayLabel(model, line, isCategory ? "Category" : `Line ${line}`);
         const values = [];
         for (let i = 0; i < periodBuckets.length; i++) {
           const bucket = periodBuckets[i];
@@ -3233,7 +4734,7 @@
         if (!values.some((v) => v !== null)) continue;
         series.push({
           id: `line:${line}`,
-          label: meta.desc,
+          label,
           values,
         });
       }
@@ -3356,15 +4857,22 @@
           useUnchecked: false,
           componentLabel: "",
           titleText: "",
+          isCategory: false,
+          targetLine: null,
+          breakoutDragSource: false,
         };
 
         if (row.type === "component") {
-          const children = getIncludedChildren(model, row.line);
+          const isCategory = Boolean(row.isCategory);
+          const children = getOrderedEffectiveChildrenForLine(model, row.line);
           const isActiveParent = row.line === activeParentLine;
           base.line = row.line;
           base.hasChildren = children.length > 0;
           base.isExpanded = state.expanded.has(row.line);
           base.isActiveParent = isActiveParent;
+          base.isCategory = isCategory;
+          base.targetLine = row.line;
+          base.breakoutDragSource = row.line !== model.rootLine;
           base.plotSelectable = row.line !== model.rootLine;
           if (base.plotSelectable) {
             const plotState = getPlotSelectionStateForLine(model, row.line, plotStateCache);
@@ -3373,8 +4881,15 @@
             base.plotIndeterminate = plotState === "indeterminate";
             base.useUnchecked = metricKey === "contrib_pp" && plotState === "unchecked";
           }
-          base.componentLabel = String(row.meta.desc || `Line ${row.line}`);
-          base.titleText = `Line ${row.line} | Nominal: ${row.meta.nominalSeriesCode || ""} | Price: ${row.meta.priceSeriesCode || ""}`;
+          base.componentLabel = String(getLineDisplayLabel(model, row.line, `Line ${row.line}`));
+          if (isCategory) {
+            const def = getBreakoutCategory(row.line);
+            base.titleText = def
+              ? `Custom breakout category under ${getLineDisplayLabel(model, def.parentLine, `Line ${def.parentLine}`)}`
+              : "Custom breakout category";
+          } else {
+            base.titleText = `Line ${row.line} | Nominal: ${row.meta.nominalSeriesCode || ""} | Price: ${row.meta.priceSeriesCode || ""}`;
+          }
           for (let b = 0; b < periodBuckets.length; b++) {
             const field = getBucketFieldKey(b);
             if (metricKey === "contrib_pp") {
@@ -3518,15 +5033,26 @@
             const data = cell.getData();
             const indentPx = Math.max(0, Number(data.depth || 0) * indentStepPx);
             if (data.rowType === "component") {
-              const action = data.isActiveParent
-                ? `Focused: ${data.componentLabel || ""}`
-                : `Focus on ${data.componentLabel || ""}`;
+              const isInlineEdit = Number.isFinite(data.line) && Number(data.line) === Number(state.inlineEditLine);
               const toggleHtml = data.hasChildren
                 ? `<button type="button" class="tree-toggle" data-line="${data.line}" aria-label="${escapeHtml(`${data.isExpanded ? "Collapse" : "Expand"} ${data.componentLabel || ""}`)}" title="${escapeHtml(`${data.isExpanded ? "Collapse" : "Expand"} ${data.componentLabel || ""}`)}">${data.isExpanded ? "-" : "+"}</button>`
                 : `<span class="tree-spacer"></span>`;
-              return `<div class="quant-node-label" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">
+              const focusBlocked = Boolean(data.isActiveParent || data.isCategory);
+              const labelAction = focusBlocked
+                ? `Label options for ${data.componentLabel || ""}`
+                : `Focus on ${data.componentLabel || ""}`;
+              const labelHtml = isInlineEdit
+                ? `<input type="text" class="breakout-inline-input" data-inline-edit-line="${data.line}" value="${escapeHtml(state.inlineEditDraft || data.componentLabel || "")}" aria-label="${escapeHtml(`Edit label for ${data.componentLabel || `line ${data.line}`}`)}" />`
+                : `<button type="button" class="component-label-btn component-focus-line" draggable="false" data-line="${data.line}" data-label-line="${data.line}" data-focus-blocked="${focusBlocked ? "1" : "0"}" aria-haspopup="menu" aria-label="${escapeHtml(labelAction)}" title="${escapeHtml(labelAction)}">${escapeHtml(data.componentLabel || "")}</button>`;
+              const dragAttrs = data.breakoutDragSource ? ` draggable="true" data-breakout-line="${data.line}"` : "";
+              const wrapClasses = data.breakoutDragSource
+                ? "quant-node-label breakout-drag-source breakout-drop-target-line"
+                : "quant-node-label breakout-drop-target-line";
+              const dropAttr = Number.isFinite(data.targetLine) ? ` data-breakout-target-line="${data.targetLine}"` : "";
+              const dragAttr = isInlineEdit ? "" : dragAttrs;
+              return `<div class="${wrapClasses}"${dropAttr} style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}"${dragAttr}>
                 ${toggleHtml}
-                <button type="button" class="component-focus-line" data-line="${data.line}" ${data.isActiveParent ? "disabled" : ""} aria-label="${escapeHtml(action)}" title="${escapeHtml(action)}">${escapeHtml(data.componentLabel || "")}</button>
+                ${labelHtml}
               </div>`;
             }
             return `<div class="quant-node-label quant-row-secondary" style="padding-left:${indentPx}px" title="${escapeHtml(data.titleText || "")}">${escapeHtml(data.componentLabel || "")}</div>`;
@@ -3675,19 +5201,26 @@
           },
           dataProcessed: () => {
             scheduleApplyPlotCheckboxIndeterminateStates();
+            applyBreakoutDragIndicators();
           },
           renderComplete: () => {
             scheduleApplyPlotCheckboxIndeterminateStates();
+            applyBreakoutDragIndicators();
           },
         });
         state.tableColumnsSignature = signature;
         scheduleApplyPlotCheckboxIndeterminateStates();
+        applyBreakoutDragIndicators();
       } else {
         const replaceResult = state.tableInstance.replaceData(rows);
         if (replaceResult && typeof replaceResult.then === "function") {
-          replaceResult.then(() => scheduleApplyPlotCheckboxIndeterminateStates());
+          replaceResult.then(() => {
+            scheduleApplyPlotCheckboxIndeterminateStates();
+            applyBreakoutDragIndicators();
+          });
         } else {
           scheduleApplyPlotCheckboxIndeterminateStates();
+          applyBreakoutDragIndicators();
         }
       }
     }
@@ -4275,6 +5808,7 @@
 
     function renderPivot() {
       if (!state.model) return;
+      if (state.contextMenu.open) closeBreakoutContextMenu();
       const model = state.model;
       const activeParentLine = getActiveParentLine(model);
       const periodBuckets = state.periodBuckets;
@@ -4391,6 +5925,7 @@
         const { months, periodBuckets, columnMode } = range;
 
         state.model = model;
+        sanitizeBreakoutStateForModel(model);
         prunePlotSelectionToModel(model);
         if (Number.isFinite(prevActiveParentLine) && model.metaByLine.has(prevActiveParentLine)) {
           state.activeParentLine = prevActiveParentLine;
@@ -4406,9 +5941,9 @@
         const activeParentLine = getActiveParentLine(model);
         const preservedExpanded = new Set();
         for (const line of prevExpanded) {
-          if (!model.metaByLine.has(line)) continue;
-          if (!isDescendantOrSelf(model, line, activeParentLine)) continue;
-          if (isExcludedInCore(line, model)) continue;
+          if (!isKnownTreeLine(model, line)) continue;
+          if (!isDescendantOrSelfInDisplay(model, line, activeParentLine)) continue;
+          if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
           preservedExpanded.add(line);
         }
         preservedExpanded.add(activeParentLine);
@@ -4484,6 +6019,162 @@
         applyDateRangeToView({ showErrors: false });
       });
     }
+    if (breakoutExportBtn) {
+      breakoutExportBtn.addEventListener("click", () => {
+        if (!state.model) return;
+        const payload = buildBreakoutExportPayload(state.model);
+        const text = JSON.stringify(payload, null, 2);
+        const blob = new Blob([text], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "pce_breakout.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      });
+    }
+    if (breakoutImportBtn && breakoutImportFileEl) {
+      breakoutImportBtn.addEventListener("click", () => {
+        breakoutImportFileEl.value = "";
+        breakoutImportFileEl.click();
+      });
+      breakoutImportFileEl.addEventListener("change", () => {
+        if (!state.model) return;
+        const file = breakoutImportFileEl.files && breakoutImportFileEl.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const payload = JSON.parse(String(reader.result || "{}"));
+            const ok = applyBreakoutImportPayload(payload, state.model);
+            if (!ok) {
+              setError("Invalid breakout file.");
+            }
+          } catch (err) {
+            setError(err && err.message ? err.message : "Failed to import breakout JSON.");
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
+    if (breakoutResetBtn) {
+      breakoutResetBtn.addEventListener("click", () => {
+        if (!hasActiveBreakoutStructure() && state.labelAliasesByLine.size === 0) return;
+        const ok = window.confirm("Reset breakout categories and assignments?");
+        if (!ok) return;
+        clearAllBreakoutState();
+      });
+    }
+    if (state.breakoutContextMenuEl) {
+      state.breakoutContextMenuEl.addEventListener("click", (ev) => {
+        const item = ev.target.closest("button.breakout-context-item[data-context-action]");
+        if (!item) return;
+        const action = String(item.getAttribute("data-context-action") || "");
+        const line = Number(item.getAttribute("data-context-line"));
+        handleBreakoutContextMenuAction(action, line);
+      });
+    }
+    document.addEventListener("click", (ev) => {
+      const inMenu = state.breakoutContextMenuEl && state.breakoutContextMenuEl.contains(ev.target);
+      if (inMenu) return;
+      if (state.contextMenu.open) closeBreakoutContextMenu();
+    });
+    document.addEventListener("scroll", () => {
+      if (state.contextMenu.open) closeBreakoutContextMenu();
+    }, true);
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        if (Number.isFinite(state.inlineEditLine)) {
+          ev.preventDefault();
+          cancelInlineEdit();
+          return;
+        }
+        if (state.contextMenu.open) {
+          closeBreakoutContextMenu();
+        }
+      }
+    });
+    outEl.addEventListener("contextmenu", (ev) => {
+      const labelBtn = ev.target.closest("[data-label-line]");
+      if (!labelBtn || !state.model) return;
+      const line = Number(labelBtn.getAttribute("data-label-line"));
+      if (!Number.isFinite(line)) return;
+      ev.preventDefault();
+      openBreakoutContextMenu({ line, x: ev.clientX, y: ev.clientY });
+    });
+    outEl.addEventListener("keydown", (ev) => {
+      const labelBtn = ev.target.closest("[data-label-line]");
+      if (!labelBtn || !state.model) return;
+      const wantsContextMenu = (ev.key === "ContextMenu") || (ev.shiftKey && ev.key === "F10");
+      if (!wantsContextMenu) return;
+      const line = Number(labelBtn.getAttribute("data-label-line"));
+      if (!Number.isFinite(line)) return;
+      ev.preventDefault();
+      const rect = labelBtn.getBoundingClientRect();
+      openBreakoutContextMenu({ line, x: rect.left + 8, y: rect.bottom + 6, anchorEl: labelBtn });
+    });
+    outEl.addEventListener("touchstart", (ev) => {
+      const labelBtn = ev.target.closest("[data-label-line]");
+      if (!labelBtn || !state.model) return;
+      const line = Number(labelBtn.getAttribute("data-label-line"));
+      if (!Number.isFinite(line)) return;
+      if (state.longPressTimer) clearTimeout(state.longPressTimer);
+      state.longPressLine = line;
+      state.longPressTriggered = false;
+      state.longPressTimer = setTimeout(() => {
+        state.longPressTriggered = true;
+        const rect = labelBtn.getBoundingClientRect();
+        openBreakoutContextMenu({ line, x: rect.left + 8, y: rect.bottom + 6, anchorEl: labelBtn });
+      }, 520);
+    }, { passive: true });
+    outEl.addEventListener("touchend", () => {
+      if (state.longPressTimer) {
+        clearTimeout(state.longPressTimer);
+        state.longPressTimer = null;
+      }
+      if (!state.contextMenu.open) {
+        state.longPressLine = null;
+        state.longPressTriggered = false;
+      }
+    }, { passive: true });
+    outEl.addEventListener("touchcancel", () => {
+      if (state.longPressTimer) {
+        clearTimeout(state.longPressTimer);
+        state.longPressTimer = null;
+      }
+      state.longPressLine = null;
+      state.longPressTriggered = false;
+    }, { passive: true });
+    outEl.addEventListener("input", (ev) => {
+      const input = ev.target.closest("input.breakout-inline-input[data-inline-edit-line]");
+      if (!input) return;
+      const line = Number(input.getAttribute("data-inline-edit-line"));
+      if (!Number.isFinite(line) || line !== Number(state.inlineEditLine)) return;
+      state.inlineEditDraft = input.value;
+    });
+    outEl.addEventListener("keydown", (ev) => {
+      const input = ev.target.closest("input.breakout-inline-input[data-inline-edit-line]");
+      if (!input) return;
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        commitInlineEdit();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        cancelInlineEdit();
+      }
+    });
+    outEl.addEventListener("focusout", (ev) => {
+      const input = ev.target.closest("input.breakout-inline-input[data-inline-edit-line]");
+      if (!input) return;
+      setTimeout(() => {
+        if (!Number.isFinite(state.inlineEditLine)) return;
+        const active = document.activeElement;
+        if (active === input) return;
+        commitInlineEdit();
+      }, 0);
+    });
     outEl.addEventListener("change", (ev) => {
       const cb = ev.target.closest("input.plot-select");
       if (!cb || !state.model) return;
@@ -4502,6 +6193,97 @@
       }
       state.chartSeriesCache = new Map();
       renderPivot();
+    });
+    outEl.addEventListener("dragstart", (ev) => {
+      const source = ev.target.closest(".breakout-drag-source[data-breakout-line]");
+      if (!source || !state.model) return;
+      const line = Number(source.getAttribute("data-breakout-line"));
+      if (!Number.isFinite(line) || !isKnownTreeLine(state.model, line)) return;
+      if (line === state.model.rootLine) return;
+      state.breakoutDragLine = line;
+      state.breakoutDragOverTargetLine = null;
+      state.breakoutDragOverPlacement = null;
+      state.breakoutDragMode = null;
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", `breakout-line:${line}`);
+      }
+      applyBreakoutDragIndicators();
+    });
+    outEl.addEventListener("dragover", (ev) => {
+      if (!Number.isFinite(state.breakoutDragLine)) return;
+      const target = ev.target.closest(".breakout-drop-target-line[data-breakout-target-line]");
+      if (!target || !state.model) {
+        if (state.breakoutDragOverTargetLine !== null) {
+          state.breakoutDragOverTargetLine = null;
+          state.breakoutDragOverPlacement = null;
+          state.breakoutDragMode = null;
+          applyBreakoutDragIndicators();
+        }
+        return;
+      }
+      const targetLine = Number(target.getAttribute("data-breakout-target-line"));
+      const intent = Number.isFinite(targetLine)
+        ? getBreakoutDragIntent(state.model, state.breakoutDragLine, target, targetLine, ev.clientY)
+        : null;
+      if (!intent) {
+        if (state.breakoutDragOverTargetLine !== null) {
+          state.breakoutDragOverTargetLine = null;
+          state.breakoutDragOverPlacement = null;
+          state.breakoutDragMode = null;
+          applyBreakoutDragIndicators();
+        }
+        return;
+      }
+      ev.preventDefault();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+      if (
+        state.breakoutDragOverTargetLine !== intent.targetLine
+        || state.breakoutDragOverPlacement !== intent.placement
+        || state.breakoutDragMode !== intent.mode
+      ) {
+        state.breakoutDragOverTargetLine = intent.targetLine;
+        state.breakoutDragOverPlacement = intent.placement;
+        state.breakoutDragMode = intent.mode;
+        applyBreakoutDragIndicators();
+      }
+    });
+    outEl.addEventListener("drop", (ev) => {
+      if (!Number.isFinite(state.breakoutDragLine) || !state.model) return;
+      const sourceLine = Number(state.breakoutDragLine);
+      const target = ev.target.closest(".breakout-drop-target-line[data-breakout-target-line]");
+      if (!target) {
+        clearBreakoutDragState();
+        return;
+      }
+      const targetLine = Number(target.getAttribute("data-breakout-target-line"));
+      const mode = state.breakoutDragMode;
+      const placement = state.breakoutDragOverPlacement;
+      ev.preventDefault();
+      clearBreakoutDragState();
+      if (!Number.isFinite(targetLine)) return;
+      if (mode === "reorder" && (placement === "before" || placement === "after")) {
+        applySiblingReorder(state.model, sourceLine, targetLine, placement);
+        return;
+      }
+      setNodeParentOverride(state.model, sourceLine, targetLine);
+    });
+    outEl.addEventListener("dragleave", (ev) => {
+      if (!Number.isFinite(state.breakoutDragLine)) return;
+      const target = ev.target.closest(".breakout-drop-target-line[data-breakout-target-line]");
+      if (!target) return;
+      const related = ev.relatedTarget;
+      if (related && target.contains(related)) return;
+      if (state.breakoutDragOverTargetLine !== null) {
+        state.breakoutDragOverTargetLine = null;
+        state.breakoutDragOverPlacement = null;
+        state.breakoutDragMode = null;
+        applyBreakoutDragIndicators();
+      }
+    });
+    outEl.addEventListener("dragend", () => {
+      if (!Number.isFinite(state.breakoutDragLine) && state.breakoutDragOverTargetLine === null) return;
+      clearBreakoutDragState();
     });
     outEl.addEventListener("dragstart", (ev) => {
       const item = ev.target.closest(".chart-legend-draggable");
@@ -4587,8 +6369,15 @@
       }
       const focusLineBtn = ev.target.closest("button.component-focus-line");
       if (focusLineBtn && state.model) {
+        const labelLine = Number(focusLineBtn.getAttribute("data-label-line"));
+        if (state.longPressTriggered && Number.isFinite(labelLine) && labelLine === Number(state.longPressLine)) {
+          state.longPressTriggered = false;
+          state.longPressLine = null;
+          return;
+        }
         const line = Number(focusLineBtn.getAttribute("data-line"));
         if (!Number.isFinite(line)) return;
+        if (focusLineBtn.getAttribute("data-focus-blocked") === "1") return;
         setActiveParentLine(line, state.model);
         return;
       }
@@ -4605,5 +6394,3 @@
   </script>
 </body>
 </html>
-
-
