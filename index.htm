@@ -766,7 +766,7 @@
     const csvRowsCache = new Map();
     const RESIDUAL_ZERO_TOL = 1e-10;
     const APP_SNAPSHOT_SCHEMA = "pce-explorer-state";
-    const APP_SNAPSHOT_VERSION = 1;
+    const APP_SNAPSHOT_VERSION = 2;
     const state = {
       model: null,
       columnMode: DEFAULT_COLUMN_MODE,
@@ -787,6 +787,7 @@
       coreDeltaEligibleAncestors: new Set(),
       compareRangeInitialized: false,
       compareRangeUserEdited: false,
+      mainRangeUserEdited: false,
       defaultsInitializedFromData: false,
       isApplyingSnapshot: false,
       pendingSnapshotPayload: null,
@@ -870,6 +871,10 @@
       const year = String(yearEl.value || "").trim();
       if (!/^\d{2}$/.test(month) || !/^\d{4}$/.test(year)) return "";
       return `${year}-${month}`;
+    }
+
+    function isValidYmString(ym) {
+      return /^\d{4}-\d{2}$/.test(String(ym || "").trim());
     }
 
     function setSelectorsFromYm(monthEl, yearEl, ym) {
@@ -1021,6 +1026,29 @@
       return { startYM, endYM };
     }
 
+    function resolveMainDefaultRange(model) {
+      if (model) {
+        const fromModel = computeDefaultYmRangeFromModel(model, 10);
+        if (fromModel && fromModel.startYM && fromModel.endYM) return fromModel;
+      }
+      const fallback = defaultRangeLastMonths(120);
+      if (!fallback || !fallback.start || !fallback.end) return null;
+      return { startYM: fallback.start, endYM: fallback.end };
+    }
+
+    function resolveCompareDefaultRangeFromMain(startYM, endYM) {
+      if (!isValidYmString(startYM) || !isValidYmString(endYM) || startYM > endYM) return null;
+      const startTP = ymToTimePeriod(startYM);
+      const endTP = ymToTimePeriod(endYM);
+      const monthsA = buildMonthRange(startTP, endTP);
+      if (!monthsA.length) return null;
+      const compareEndYM = subtractMonthsFromYm(startYM, 1);
+      if (!compareEndYM) return null;
+      const compareStartYM = subtractMonthsFromYm(compareEndYM, monthsA.length - 1);
+      if (!compareStartYM || compareStartYM > compareEndYM) return null;
+      return { compareStartYM, compareEndYM };
+    }
+
     function isMobilePortraitTableLayout() {
       if (typeof window === "undefined") return false;
       let smallWidth = Number(window.innerWidth) <= 760;
@@ -1088,18 +1116,11 @@
     function initializeCompareRangeFromMainRange() {
       const selected = getSelectedYmRange();
       if (!selected.valid) return false;
-      const startTP = ymToTimePeriod(selected.startYM);
-      const endTP = ymToTimePeriod(selected.endYM);
-      const monthsA = buildMonthRange(startTP, endTP);
-      if (!monthsA.length) return false;
+      const compareRange = resolveCompareDefaultRangeFromMain(selected.startYM, selected.endYM);
+      if (!compareRange) return false;
 
-      const compareEndYM = subtractMonthsFromYm(selected.startYM, 1);
-      if (!compareEndYM) return false;
-      const compareStartYM = subtractMonthsFromYm(compareEndYM, monthsA.length - 1);
-      if (!compareStartYM || compareStartYM > compareEndYM) return false;
-
-      setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
-      setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
+      setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareRange.compareStartYM);
+      setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareRange.compareEndYM);
       state.compareRangeInitialized = true;
       return true;
     }
@@ -2786,6 +2807,12 @@
       const metricKey = METRICS[metricEl.value] ? metricEl.value : "contrib_pp";
       const grouping = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
       const indexMode = (coreModeEl.value === "core") ? "core" : "headline";
+      const mainDatePolicy = state.mainRangeUserEdited
+        ? { mode: "explicit", startYM, endYM }
+        : { mode: "default" };
+      const compareDatePolicy = state.compareRangeUserEdited
+        ? { mode: "explicit", startYM: compareStartYM, endYM: compareEndYM }
+        : { mode: "default" };
       const expandedLines = [...state.expanded]
         .map((v) => Number(v))
         .filter((line) => Number.isFinite(line) && isKnownTreeLine(model, line))
@@ -2805,13 +2832,13 @@
           details: buildDatasetFingerprintDetails(model),
         },
         controls: {
-          startYM,
-          endYM,
           metric: metricKey,
           grouping,
           indexMode,
-          compareStartYM,
-          compareEndYM,
+          datePolicy: {
+            main: mainDatePolicy,
+            compare: compareDatePolicy,
+          },
         },
         view: {
           activeParentLine: getActiveParentLine(model),
@@ -2849,6 +2876,7 @@
       state.activeParentLine = model && model.metaByLine.has(model.rootLine) ? model.rootLine : null;
       state.compareRangeInitialized = false;
       state.compareRangeUserEdited = false;
+      state.mainRangeUserEdited = false;
     }
 
     function applyAppSnapshotPayload(payload, model) {
@@ -2882,24 +2910,53 @@
       try {
         resetSnapshotManagedState(model);
 
-        const startYM = String(controls.startYM || "");
-        const endYM = String(controls.endYM || "");
-        const compareStartYM = String(controls.compareStartYM || "");
-        const compareEndYM = String(controls.compareEndYM || "");
+        const datePolicy = controls.datePolicy && typeof controls.datePolicy === "object" ? controls.datePolicy : null;
+        if (!datePolicy) return false;
+        const mainPolicy = datePolicy.main && typeof datePolicy.main === "object" ? datePolicy.main : null;
+        const comparePolicy = datePolicy.compare && typeof datePolicy.compare === "object" ? datePolicy.compare : null;
+        if (!mainPolicy || !comparePolicy) return false;
+        const mainMode = String(mainPolicy.mode || "");
+        const compareMode = String(comparePolicy.mode || "");
+        if (mainMode !== "default" && mainMode !== "explicit") return false;
+        if (compareMode !== "default" && compareMode !== "explicit") return false;
+
+        let startYM = "";
+        let endYM = "";
+        if (mainMode === "default") {
+          const mainDefault = resolveMainDefaultRange(model);
+          if (!mainDefault || !isValidYmString(mainDefault.startYM) || !isValidYmString(mainDefault.endYM)) return false;
+          startYM = mainDefault.startYM;
+          endYM = mainDefault.endYM;
+          state.mainRangeUserEdited = false;
+        } else {
+          startYM = String(mainPolicy.startYM || "");
+          endYM = String(mainPolicy.endYM || "");
+          if (!isValidYmString(startYM) || !isValidYmString(endYM) || startYM > endYM) return false;
+          state.mainRangeUserEdited = true;
+        }
+
         const grouping = COLUMN_MODES[controls.grouping] ? String(controls.grouping) : DEFAULT_COLUMN_MODE;
         const metric = METRICS[controls.metric] ? String(controls.metric) : "contrib_pp";
         const indexMode = controls.indexMode === "core" ? "core" : "headline";
 
-        if (startYM) setSelectorsFromYm(startMonthEl, startYearEl, startYM);
-        if (endYM) setSelectorsFromYm(endMonthEl, endYearEl, endYM);
-        if (compareStartYM) setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
-        if (compareEndYM) setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
+        setSelectorsFromYm(startMonthEl, startYearEl, startYM);
+        setSelectorsFromYm(endMonthEl, endYearEl, endYM);
+        if (compareMode === "explicit") {
+          const compareStartYM = String(comparePolicy.startYM || "");
+          const compareEndYM = String(comparePolicy.endYM || "");
+          if (!isValidYmString(compareStartYM) || !isValidYmString(compareEndYM) || compareStartYM > compareEndYM) return false;
+          setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
+          setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
+          state.compareRangeInitialized = true;
+          state.compareRangeUserEdited = true;
+        } else {
+          state.compareRangeInitialized = false;
+          state.compareRangeUserEdited = false;
+        }
         metricEl.value = metric;
         columnsEl.value = grouping;
         coreModeEl.value = indexMode;
         state.coreMode = indexMode;
-        state.compareRangeInitialized = Boolean(compareStartYM && compareEndYM);
-        state.compareRangeUserEdited = state.compareRangeInitialized;
         updateCompareControlsVisibility();
 
         if (!applyBreakoutSnapshotState(breakout, model)) return false;
@@ -6218,16 +6275,14 @@
         }
 
         if (!state.defaultsInitializedFromData) {
-          const detectedDefaultRange = computeDefaultYmRangeFromModel(model, 10);
-          if (detectedDefaultRange) {
-            setSelectorsFromYm(startMonthEl, startYearEl, detectedDefaultRange.startYM);
-            setSelectorsFromYm(endMonthEl, endYearEl, detectedDefaultRange.endYM);
-          } else {
-            const fallbackRange = defaultRangeLastMonths(120);
-            setSelectorsFromYm(startMonthEl, startYearEl, fallbackRange.start);
-            setSelectorsFromYm(endMonthEl, endYearEl, fallbackRange.end);
+          const detectedDefaultRange = resolveMainDefaultRange(model);
+          if (!detectedDefaultRange) {
+            throw new Error("Unable to resolve default main date range.");
           }
+          setSelectorsFromYm(startMonthEl, startYearEl, detectedDefaultRange.startYM);
+          setSelectorsFromYm(endMonthEl, endYearEl, detectedDefaultRange.endYM);
           columnsEl.value = DEFAULT_COLUMN_MODE;
+          state.mainRangeUserEdited = false;
           state.defaultsInitializedFromData = true;
           range = applyDateRangeToView({ showErrors: true });
         } else if (!range) {
@@ -6297,6 +6352,7 @@
     setSelectorsFromYm(endMonthEl, endYearEl, def.end);
     setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, def.start);
     setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, def.end);
+    state.mainRangeUserEdited = false;
     columnsEl.value = DEFAULT_COLUMN_MODE;
     coreModeEl.value = state.coreMode;
     updateCompareControlsVisibility();
@@ -6333,6 +6389,7 @@
     for (const el of [startMonthEl, startYearEl, endMonthEl, endYearEl]) {
       el.addEventListener("change", () => {
         if (state.isApplyingSnapshot) return;
+        state.mainRangeUserEdited = true;
         if (isCompareGroupingSelected() && !state.compareRangeUserEdited) {
           initializeCompareRangeFromMainRange();
         }
