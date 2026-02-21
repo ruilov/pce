@@ -635,7 +635,7 @@
   <div class="title-row">
     <h1>PCE Inflation Explorer</h1>
     <div class="title-actions" aria-label="Breakout utilities">
-      <button type="button" id="breakoutExportBtn" class="icon-btn" aria-label="Export breakout JSON" title="Export breakout JSON">
+      <button type="button" id="breakoutExportBtn" class="icon-btn" aria-label="Export page state JSON" title="Export page state JSON">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
           <path d="M8 3v5h8V3"></path>
@@ -643,7 +643,7 @@
           <path d="M9.5 15.5L12 18l2.5-2.5"></path>
         </svg>
       </button>
-      <button type="button" id="breakoutImportBtn" class="icon-btn" aria-label="Import breakout JSON" title="Import breakout JSON">
+      <button type="button" id="breakoutImportBtn" class="icon-btn" aria-label="Import page state JSON" title="Import page state JSON">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
           <path d="M12 3v12"></path>
@@ -765,11 +765,8 @@
 
     const csvRowsCache = new Map();
     const RESIDUAL_ZERO_TOL = 1e-10;
-    const BREAKOUT_SCHEMA_VERSION = 5;
-    const BREAKOUT_V4_SCHEMA_VERSION = 4;
-    const BREAKOUT_V3_SCHEMA_VERSION = 3;
-    const BREAKOUT_V2_SCHEMA_VERSION = 2;
-    const BREAKOUT_LEGACY_SCHEMA_VERSION = 1;
+    const APP_SNAPSHOT_SCHEMA = "pce-explorer-state";
+    const APP_SNAPSHOT_VERSION = 1;
     const state = {
       model: null,
       columnMode: DEFAULT_COLUMN_MODE,
@@ -791,6 +788,8 @@
       compareRangeInitialized: false,
       compareRangeUserEdited: false,
       defaultsInitializedFromData: false,
+      isApplyingSnapshot: false,
+      pendingSnapshotPayload: null,
       seriesColorById: new Map(),
       tableInstance: null,
       tableColumnsSignature: "",
@@ -2571,7 +2570,57 @@
       }
     }
 
-    function buildBreakoutExportPayload(model) {
+    function hashStringFNV1a(input, seed = 0x811c9dc5) {
+      let hash = seed >>> 0;
+      const text = String(input || "");
+      for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+      }
+      return hash >>> 0;
+    }
+
+    function buildRootSeriesChecksum(model, rootNominalSeries, rootPriceSeries, months) {
+      const nominalByTp = model.nominalBySeries.get(rootNominalSeries);
+      const priceByTp = model.priceBySeries.get(rootPriceSeries);
+      let hash = 0x811c9dc5;
+      for (const tp of (months || [])) {
+        const n = nominalByTp ? nominalByTp.get(tp) : null;
+        const p = priceByTp ? priceByTp.get(tp) : null;
+        const nText = Number.isFinite(n) ? Number(n).toPrecision(12) : "na";
+        const pText = Number.isFinite(p) ? Number(p).toPrecision(12) : "na";
+        hash = hashStringFNV1a(`${tp}|${nText}|${pText};`, hash);
+      }
+      return (hash >>> 0).toString(16).padStart(8, "0");
+    }
+
+    function buildDatasetFingerprintDetails(model) {
+      const months = getAvailableRootMonths(model);
+      const rootMeta = model.metaByLine.get(model.rootLine);
+      const rootNominalSeries = rootMeta ? String(rootMeta.nominalSeriesCode || "").trim() : "";
+      const rootPriceSeries = rootMeta ? String(rootMeta.priceSeriesCode || "").trim() : "";
+      return {
+        pricePath: String(DATA_LOAD_CONFIG.PRICE_CSV_PATH || ""),
+        nominalPath: String(DATA_LOAD_CONFIG.NOMINAL_CSV_PATH || ""),
+        hierarchyPath: String(DATA_LOAD_CONFIG.HIERARCHY_CSV_PATH || ""),
+        rootLine: model.rootLine,
+        lineCount: model.metaByLine.size,
+        availableMonthsFirst: months.length ? months[0] : "",
+        availableMonthsLast: months.length ? months[months.length - 1] : "",
+        availableMonthsCount: months.length,
+        rootNominalSeriesCode: rootNominalSeries,
+        rootPriceSeriesCode: rootPriceSeries,
+        rootSeriesChecksum: buildRootSeriesChecksum(model, rootNominalSeries, rootPriceSeries, months),
+      };
+    }
+
+    function buildDatasetFingerprint(model) {
+      const details = buildDatasetFingerprintDetails(model);
+      const hash = hashStringFNV1a(JSON.stringify(details));
+      return (hash >>> 0).toString(16).padStart(8, "0");
+    }
+
+    function buildBreakoutSnapshotState(model) {
       const categories = [...state.breakoutCategoryByLine.values()]
         .sort((a, b) => {
           if (a.parentLine !== b.parentLine) return a.parentLine - b.parentLine;
@@ -2628,91 +2677,39 @@
         childOrders[String(parentLine)] = cleaned;
       }
 
-      return {
-        version: BREAKOUT_SCHEMA_VERSION,
-        categories,
-        reparents,
-        aliases,
-        childOrders,
-      };
+      return { categories, reparents, aliases, childOrders };
     }
 
-    function applyBreakoutImportPayload(payload, model) {
-      if (!model || !payload) return false;
-      const version = Number(payload.version);
-      if (
-        version !== BREAKOUT_SCHEMA_VERSION
-        && version !== BREAKOUT_V4_SCHEMA_VERSION
-        && version !== BREAKOUT_V3_SCHEMA_VERSION
-        && version !== BREAKOUT_V2_SCHEMA_VERSION
-        && version !== BREAKOUT_LEGACY_SCHEMA_VERSION
-      ) return false;
-      const reparentsPayload = payload.reparents && typeof payload.reparents === "object"
-        ? payload.reparents
-        : {};
-      const assignmentsPayload = payload.assignments && typeof payload.assignments === "object"
-        ? payload.assignments
-        : {};
-      const aliases = payload.aliases && typeof payload.aliases === "object"
-        ? payload.aliases
-        : {};
-      const childOrdersPayload = payload.childOrders && typeof payload.childOrders === "object"
-        ? payload.childOrders
-        : {};
+    function applyBreakoutSnapshotState(breakoutPayload, model) {
+      if (!model) return false;
+      const payload = breakoutPayload && typeof breakoutPayload === "object" ? breakoutPayload : {};
+      const reparentsPayload = payload.reparents && typeof payload.reparents === "object" ? payload.reparents : {};
+      const aliases = payload.aliases && typeof payload.aliases === "object" ? payload.aliases : {};
+      const childOrdersPayload = payload.childOrders && typeof payload.childOrders === "object" ? payload.childOrders : {};
+      const categoryRows = Array.isArray(payload.categories) ? payload.categories : [];
 
-      const previousSelection = state.plotSelectedByLine;
       state.breakoutCategoriesByParent = new Map();
       state.breakoutCategoryByLine = new Map();
       state.breakoutCategoryLineById = new Map();
       state.reparentByLine = new Map();
       state.childOrderByParent = new Map();
       state.labelAliasesByLine = new Map();
-      state.plotSelectedByLine = new Map([...previousSelection.entries()].filter(([line]) => model.metaByLine.has(Number(line))));
       state.breakoutVirtualLineSeq = 0;
       state.breakoutCategorySeq = 0;
 
-      const categoryRows = [];
-      if (version === BREAKOUT_SCHEMA_VERSION || version === BREAKOUT_V4_SCHEMA_VERSION || version === BREAKOUT_V3_SCHEMA_VERSION) {
-        const rows = Array.isArray(payload.categories) ? payload.categories : [];
-        for (const row of rows) {
-          if (!row || typeof row !== "object") continue;
-          categoryRows.push({
-            id: sanitizeBreakoutCategoryId(row.id, ""),
-            label: sanitizeBreakoutLabel(row.label, "Category"),
-            order: Number.isFinite(Number(row.order)) ? Number(row.order) : 0,
-            parentKind: String(row.parentKind || "line"),
-            parentLine: Number(row.parentLine),
-            parentCategoryId: sanitizeBreakoutCategoryId(row.parentCategoryId, ""),
-          });
-        }
-      } else {
-        const catsByAnchor = payload.categoriesByAnchor && typeof payload.categoriesByAnchor === "object"
-          ? payload.categoriesByAnchor
-          : {};
-        for (const [anchorRaw, list] of Object.entries(catsByAnchor)) {
-          const anchorLine = Number(anchorRaw);
-          if (!model.metaByLine.has(anchorLine) || !Array.isArray(list)) continue;
-          const rows = [...list].sort((a, b) => {
-            const oa = Number.isFinite(Number(a && a.order)) ? Number(a.order) : 0;
-            const ob = Number.isFinite(Number(b && b.order)) ? Number(b.order) : 0;
-            return oa - ob;
-          });
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i] || {};
-            categoryRows.push({
-              id: sanitizeBreakoutCategoryId(row.id, ""),
-              label: sanitizeBreakoutLabel(row.label, "Category"),
-              order: Number.isFinite(Number(row.order)) ? Number(row.order) : i,
-              parentKind: "line",
-              parentLine: anchorLine,
-              parentCategoryId: "",
-            });
-          }
-        }
-      }
-
       const categoryLineById = new Map();
-      const pending = [...categoryRows];
+      const pending = [];
+      for (const row of categoryRows) {
+        if (!row || typeof row !== "object") continue;
+        pending.push({
+          id: sanitizeBreakoutCategoryId(row.id, ""),
+          label: sanitizeBreakoutLabel(row.label, "Category"),
+          order: Number.isFinite(Number(row.order)) ? Number(row.order) : 0,
+          parentKind: String(row.parentKind || "line"),
+          parentLine: Number(row.parentLine),
+          parentCategoryId: sanitizeBreakoutCategoryId(row.parentCategoryId, ""),
+        });
+      }
       let importProgress = true;
       while (pending.length && importProgress) {
         importProgress = false;
@@ -2741,42 +2738,31 @@
           importProgress = true;
         }
       }
+      if (pending.length) return false;
 
       const nextReparents = new Map();
-      if (version === BREAKOUT_SCHEMA_VERSION || version === BREAKOUT_V4_SCHEMA_VERSION) {
-        for (const [sourceRaw, row] of Object.entries(reparentsPayload)) {
-          const sourceLine = Number(sourceRaw);
-          if (!model.metaByLine.has(sourceLine) || !row) continue;
-          const targetLine = Number(row.targetLine);
-          if (!Number.isFinite(targetLine)) continue;
-          if (!canReparentNode(model, sourceLine, targetLine)) continue;
-          nextReparents.set(sourceLine, { targetLine });
-        }
-      }
-      for (const [sourceRaw, row] of Object.entries(assignmentsPayload)) {
+      for (const [sourceRaw, row] of Object.entries(reparentsPayload)) {
         const sourceLine = Number(sourceRaw);
         if (!model.metaByLine.has(sourceLine) || !row) continue;
-        const categoryLine = categoryLineById.get(String(row.categoryId || ""));
-        if (!Number.isFinite(categoryLine)) continue;
-        if (!canReparentNode(model, sourceLine, categoryLine)) continue;
-        nextReparents.set(sourceLine, { targetLine: categoryLine });
+        const targetLine = Number(row.targetLine);
+        if (!Number.isFinite(targetLine)) continue;
+        if (!canReparentNode(model, sourceLine, targetLine)) continue;
+        nextReparents.set(sourceLine, { targetLine });
       }
       state.reparentByLine = nextReparents;
 
-      if (version === BREAKOUT_SCHEMA_VERSION) {
-        for (const [parentRaw, rows] of Object.entries(childOrdersPayload)) {
-          const parentLine = Number(parentRaw);
-          if (!Number.isFinite(parentLine) || !Array.isArray(rows)) continue;
-          const cleaned = [];
-          const seen = new Set();
-          for (const raw of rows) {
-            const line = Number(raw);
-            if (!Number.isFinite(line) || seen.has(line)) continue;
-            seen.add(line);
-            cleaned.push(line);
-          }
-          if (cleaned.length) state.childOrderByParent.set(parentLine, cleaned);
+      for (const [parentRaw, rows] of Object.entries(childOrdersPayload)) {
+        const parentLine = Number(parentRaw);
+        if (!Number.isFinite(parentLine) || !Array.isArray(rows)) continue;
+        const cleaned = [];
+        const seen = new Set();
+        for (const raw of rows) {
+          const line = Number(raw);
+          if (!Number.isFinite(line) || seen.has(line)) continue;
+          seen.add(line);
+          cleaned.push(line);
         }
+        if (cleaned.length) state.childOrderByParent.set(parentLine, cleaned);
       }
 
       for (const [lineRaw, aliasRaw] of Object.entries(aliases)) {
@@ -2789,7 +2775,225 @@
 
       sanitizeBreakoutStateForModel(model);
       incrementBreakoutVersion();
-      renderPivot();
+      return true;
+    }
+
+    function buildAppSnapshotPayload(model) {
+      const startYM = composeYmFromSelectors(startMonthEl, startYearEl);
+      const endYM = composeYmFromSelectors(endMonthEl, endYearEl);
+      const compareStartYM = composeYmFromSelectors(compareStartMonthEl, compareStartYearEl);
+      const compareEndYM = composeYmFromSelectors(compareEndMonthEl, compareEndYearEl);
+      const metricKey = METRICS[metricEl.value] ? metricEl.value : "contrib_pp";
+      const grouping = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
+      const indexMode = (coreModeEl.value === "core") ? "core" : "headline";
+      const expandedLines = [...state.expanded]
+        .map((v) => Number(v))
+        .filter((line) => Number.isFinite(line) && isKnownTreeLine(model, line))
+        .sort((a, b) => a - b);
+      const plotSelectionByLine = {};
+      for (const [lineRaw, selected] of state.plotSelectedByLine.entries()) {
+        const line = Number(lineRaw);
+        if (!Number.isFinite(line) || !isKnownTreeLine(model, line)) continue;
+        plotSelectionByLine[String(line)] = Boolean(selected);
+      }
+      return {
+        schema: APP_SNAPSHOT_SCHEMA,
+        version: APP_SNAPSHOT_VERSION,
+        exportedAt: new Date().toISOString(),
+        dataset: {
+          fingerprint: buildDatasetFingerprint(model),
+          details: buildDatasetFingerprintDetails(model),
+        },
+        controls: {
+          startYM,
+          endYM,
+          metric: metricKey,
+          grouping,
+          indexMode,
+          compareStartYM,
+          compareEndYM,
+        },
+        view: {
+          activeParentLine: getActiveParentLine(model),
+          expandedLines,
+          plotResidualExcluded: Boolean(state.plotResidualExcluded),
+          plotSelectionByLine,
+          plotStackOrderTopToBottom: [...state.plotStackOrderTopToBottom],
+        },
+        breakout: buildBreakoutSnapshotState(model),
+      };
+    }
+
+    function resetSnapshotManagedState(model) {
+      clearInlineEditState();
+      closeBreakoutContextMenu();
+      state.longPressLine = null;
+      state.longPressTriggered = false;
+      if (state.longPressTimer) {
+        clearTimeout(state.longPressTimer);
+        state.longPressTimer = null;
+      }
+      state.breakoutCategoriesByParent = new Map();
+      state.breakoutCategoryByLine = new Map();
+      state.breakoutCategoryLineById = new Map();
+      state.reparentByLine = new Map();
+      state.childOrderByParent = new Map();
+      state.labelAliasesByLine = new Map();
+      state.plotSelectedByLine = new Map();
+      state.plotResidualExcluded = true;
+      state.plotStackOrderTopToBottom = [];
+      state.plotStackOrderVersion += 1;
+      state.breakoutCategorySeq = 0;
+      state.breakoutVirtualLineSeq = 0;
+      state.expanded = new Set();
+      state.activeParentLine = model && model.metaByLine.has(model.rootLine) ? model.rootLine : null;
+      state.compareRangeInitialized = false;
+      state.compareRangeUserEdited = false;
+    }
+
+    function applyAppSnapshotPayload(payload, model) {
+      if (!model || !payload || typeof payload !== "object") return false;
+      const rollbackPayload = buildAppSnapshotPayload(model);
+      const ok = applyAppSnapshotPayloadCore(payload, model);
+      if (ok) return true;
+      applyAppSnapshotPayloadCore(rollbackPayload, model, { suppressDatasetWarning: true });
+      return false;
+    }
+
+    function applyAppSnapshotPayloadCore(payload, model, options = {}) {
+      if (!model || !payload || typeof payload !== "object") return false;
+      if (String(payload.schema || "") !== APP_SNAPSHOT_SCHEMA) return false;
+      if (Number(payload.version) !== APP_SNAPSHOT_VERSION) return false;
+
+      const controls = payload.controls && typeof payload.controls === "object" ? payload.controls : {};
+      const view = payload.view && typeof payload.view === "object" ? payload.view : {};
+      const breakout = payload.breakout && typeof payload.breakout === "object" ? payload.breakout : {};
+      const incomingFingerprint = payload.dataset && payload.dataset.fingerprint
+        ? String(payload.dataset.fingerprint)
+        : "";
+      const currentFingerprint = buildDatasetFingerprint(model);
+      if (!options.suppressDatasetWarning && incomingFingerprint && currentFingerprint && incomingFingerprint !== currentFingerprint) {
+        const msg = "Imported snapshot was created from a different dataset fingerprint. Applying anyway.";
+        setError(msg);
+        setStatus("Warning: dataset fingerprint mismatch. Applying snapshot.");
+      }
+
+      state.isApplyingSnapshot = true;
+      try {
+        resetSnapshotManagedState(model);
+
+        const startYM = String(controls.startYM || "");
+        const endYM = String(controls.endYM || "");
+        const compareStartYM = String(controls.compareStartYM || "");
+        const compareEndYM = String(controls.compareEndYM || "");
+        const grouping = COLUMN_MODES[controls.grouping] ? String(controls.grouping) : DEFAULT_COLUMN_MODE;
+        const metric = METRICS[controls.metric] ? String(controls.metric) : "contrib_pp";
+        const indexMode = controls.indexMode === "core" ? "core" : "headline";
+
+        if (startYM) setSelectorsFromYm(startMonthEl, startYearEl, startYM);
+        if (endYM) setSelectorsFromYm(endMonthEl, endYearEl, endYM);
+        if (compareStartYM) setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
+        if (compareEndYM) setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
+        metricEl.value = metric;
+        columnsEl.value = grouping;
+        coreModeEl.value = indexMode;
+        state.coreMode = indexMode;
+        state.compareRangeInitialized = Boolean(compareStartYM && compareEndYM);
+        state.compareRangeUserEdited = state.compareRangeInitialized;
+        updateCompareControlsVisibility();
+
+        if (!applyBreakoutSnapshotState(breakout, model)) return false;
+        const range = applyDateRangeToView({ showErrors: true });
+        if (!range) return false;
+
+        let nextActiveParent = Number(view.activeParentLine);
+        if (!Number.isFinite(nextActiveParent) || !model.metaByLine.has(nextActiveParent)) {
+          nextActiveParent = model.rootLine;
+        }
+        if (isCoreEnabled() && isExcludedInCore(nextActiveParent, model)) {
+          nextActiveParent = findNearestIncludedAncestor(model, nextActiveParent);
+        }
+        state.activeParentLine = nextActiveParent;
+
+        const nextExpanded = new Set([nextActiveParent]);
+        const expandedLines = Array.isArray(view.expandedLines) ? view.expandedLines : [];
+        for (const raw of expandedLines) {
+          const line = Number(raw);
+          if (!Number.isFinite(line) || !isKnownTreeLine(model, line)) continue;
+          if (!isDescendantOrSelfInDisplay(model, line, nextActiveParent)) continue;
+          if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
+          nextExpanded.add(line);
+        }
+        state.expanded = nextExpanded;
+        pruneExpandedToActiveParent(model);
+
+        const selectionObj = view.plotSelectionByLine && typeof view.plotSelectionByLine === "object"
+          ? view.plotSelectionByLine
+          : {};
+        const nextPlotSelection = new Map();
+        for (const [lineRaw, selected] of Object.entries(selectionObj)) {
+          const line = Number(lineRaw);
+          if (!Number.isFinite(line) || !isKnownTreeLine(model, line)) continue;
+          nextPlotSelection.set(line, Boolean(selected));
+        }
+        state.plotSelectedByLine = nextPlotSelection;
+        prunePlotSelectionToModel(model);
+
+        state.plotResidualExcluded = Boolean(view.plotResidualExcluded);
+        const nextStackOrder = [];
+        const stackOrder = Array.isArray(view.plotStackOrderTopToBottom) ? view.plotStackOrderTopToBottom : [];
+        const seenIds = new Set();
+        for (const raw of stackOrder) {
+          const id = String(raw || "").trim();
+          if (!id || seenIds.has(id)) continue;
+          seenIds.add(id);
+          nextStackOrder.push(id);
+        }
+        state.plotStackOrderTopToBottom = nextStackOrder;
+        state.plotStackOrderVersion += 1;
+        state.chartSeriesCache = new Map();
+        renderPivot();
+        updateParentNavControlState();
+      } finally {
+        state.isApplyingSnapshot = false;
+      }
+      return true;
+    }
+
+    function downloadJsonText(text, filename) {
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    async function saveJsonTextWithPickerOrDownload(text, suggestedName) {
+      const picker = typeof window !== "undefined" ? window.showSaveFilePicker : null;
+      if (typeof picker === "function") {
+        try {
+          const handle = await picker({
+            suggestedName,
+            types: [{
+              description: "JSON file",
+              accept: { "application/json": [".json"] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(text);
+          await writable.close();
+          return true;
+        } catch (err) {
+          if (err && err.name === "AbortError") return false;
+          downloadJsonText(text, suggestedName);
+          return true;
+        }
+      }
+      downloadJsonText(text, suggestedName);
       return true;
     }
 
@@ -5882,7 +6086,7 @@
       state.chartSeriesCache = new Map();
       updateCompareControlsVisibility();
 
-      if (state.model) {
+      if (state.model && !state.isApplyingSnapshot) {
         setError("");
         renderPivot();
       }
@@ -6035,6 +6239,17 @@
         const { months, periodBuckets, columnMode } = range;
 
         state.model = model;
+        if (state.pendingSnapshotPayload) {
+          const pending = state.pendingSnapshotPayload;
+          state.pendingSnapshotPayload = null;
+          const applied = applyAppSnapshotPayload(pending, model);
+          if (!applied) {
+            setError("Invalid page state file.");
+          } else {
+            setStatus(`Loaded ${model.metaByLine.size} components.`);
+            return;
+          }
+        }
         sanitizeBreakoutStateForModel(model);
         prunePlotSelectionToModel(model);
         if (Number.isFinite(prevActiveParentLine) && model.metaByLine.has(prevActiveParentLine)) {
@@ -6089,9 +6304,11 @@
     state.tableMobilePortrait = isMobilePortraitTableLayout();
 
     metricEl.addEventListener("change", () => {
+      if (state.isApplyingSnapshot) return;
       if (state.model) renderPivot();
     });
     columnsEl.addEventListener("change", () => {
+      if (state.isApplyingSnapshot) return;
       updateCompareControlsVisibility();
       if (isCompareGroupingSelected() && (!state.compareRangeInitialized || !state.compareRangeUserEdited)) {
         initializeCompareRangeFromMainRange();
@@ -6100,6 +6317,7 @@
       applyDateRangeToView({ showErrors: false });
     });
     coreModeEl.addEventListener("change", () => {
+      if (state.isApplyingSnapshot) return;
       const nextMode = (coreModeEl.value === "core") ? "core" : "headline";
       if (state.coreMode === nextMode) return;
       state.coreMode = nextMode;
@@ -6114,6 +6332,7 @@
     });
     for (const el of [startMonthEl, startYearEl, endMonthEl, endYearEl]) {
       el.addEventListener("change", () => {
+        if (state.isApplyingSnapshot) return;
         if (isCompareGroupingSelected() && !state.compareRangeUserEdited) {
           initializeCompareRangeFromMainRange();
         }
@@ -6123,6 +6342,7 @@
     }
     for (const el of [compareStartMonthEl, compareStartYearEl, compareEndMonthEl, compareEndYearEl]) {
       el.addEventListener("change", () => {
+        if (state.isApplyingSnapshot) return;
         state.compareRangeUserEdited = true;
         state.compareRangeInitialized = true;
         if (!state.model || !isCompareGroupingSelected()) return;
@@ -6130,19 +6350,18 @@
       });
     }
     if (breakoutExportBtn) {
-      breakoutExportBtn.addEventListener("click", () => {
+      breakoutExportBtn.addEventListener("click", async () => {
         if (!state.model) return;
-        const payload = buildBreakoutExportPayload(state.model);
-        const text = JSON.stringify(payload, null, 2);
-        const blob = new Blob([text], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "pce_breakout.json";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 0);
+        try {
+          const payload = buildAppSnapshotPayload(state.model);
+          const text = JSON.stringify(payload, null, 2);
+          const stamp = new Date().toISOString().slice(0, 10);
+          const filename = `pce_explorer_state_${stamp}.json`;
+          const saved = await saveJsonTextWithPickerOrDownload(text, filename);
+          if (saved) setStatus("Page state exported.");
+        } catch (err) {
+          setError(err && err.message ? err.message : "Failed to export page state JSON.");
+        }
       });
     }
     if (breakoutImportBtn && breakoutImportFileEl) {
@@ -6151,22 +6370,26 @@
         breakoutImportFileEl.click();
       });
       breakoutImportFileEl.addEventListener("change", () => {
-        if (!state.model) return;
         const file = breakoutImportFileEl.files && breakoutImportFileEl.files[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const payload = JSON.parse(String(reader.result || "{}"));
-            const ok = applyBreakoutImportPayload(payload, state.model);
-            if (!ok) {
-              setError("Invalid breakout file.");
+        file.text()
+          .then((text) => {
+            const payload = JSON.parse(String(text || "{}"));
+            if (!state.model) {
+              state.pendingSnapshotPayload = payload;
+              setStatus("Page state import queued; it will apply after data loads.");
+              return;
             }
-          } catch (err) {
-            setError(err && err.message ? err.message : "Failed to import breakout JSON.");
-          }
-        };
-        reader.readAsText(file);
+            const ok = applyAppSnapshotPayload(payload, state.model);
+            if (!ok) {
+              setError("Invalid page state file.");
+              return;
+            }
+            setStatus("Page state imported.");
+          })
+          .catch((err) => {
+            setError(err && err.message ? err.message : "Failed to import page state JSON.");
+          });
       });
     }
     if (state.breakoutContextMenuEl) {
