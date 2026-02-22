@@ -780,8 +780,122 @@
     const RESIDUAL_ZERO_TOL = 1e-10;
     const APP_SNAPSHOT_SCHEMA = "pce-explorer-state";
     const APP_SNAPSHOT_VERSION = 2;
-    const state = {
+    const APP_ACTIONS = {
+      STATE_PATCH: "STATE_PATCH",
+      STATE_SET: "STATE_SET",
+      STATE_SET_MAP_ENTRY: "STATE_SET_MAP_ENTRY",
+      STATE_DELETE_MAP_ENTRY: "STATE_DELETE_MAP_ENTRY",
+      STATE_ADD_SET_ENTRY: "STATE_ADD_SET_ENTRY",
+      STATE_DELETE_SET_ENTRY: "STATE_DELETE_SET_ENTRY",
+      STATE_CLEAR_CACHE: "STATE_CLEAR_CACHE",
+    };
+    function createStore(initialState, reducer) {
+      const listeners = new Set();
+      const store = {
+        _state: initialState,
+        getState() {
+          return store._state;
+        },
+        dispatch(action) {
+          const changed = reducer(store._state, action || {});
+          if (!changed) return false;
+          for (const listener of listeners) {
+            try {
+              listener(store._state, action);
+            } catch (_) {}
+          }
+          return true;
+        },
+        subscribe(listener) {
+          if (typeof listener !== "function") return () => {};
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      };
+      return store;
+    }
+    function reduceAppState(draft, action) {
+      if (!draft || !action || typeof action !== "object") return false;
+      if (action.type === APP_ACTIONS.STATE_PATCH) {
+        const patch = action.patch && typeof action.patch === "object" ? action.patch : null;
+        if (!patch) return false;
+        let changed = false;
+        for (const [k, v] of Object.entries(patch)) {
+          if (Object.is(draft[k], v)) continue;
+          draft[k] = v;
+          changed = true;
+        }
+        return changed;
+      }
+      if (action.type === APP_ACTIONS.STATE_SET) {
+        const key = String(action.key || "").trim();
+        if (!key) return false;
+        if (Object.is(draft[key], action.value)) return false;
+        draft[key] = action.value;
+        return true;
+      }
+      if (action.type === APP_ACTIONS.STATE_SET_MAP_ENTRY) {
+        const key = String(action.key || "").trim();
+        const mapObj = key ? draft[key] : null;
+        if (!(mapObj instanceof Map)) return false;
+        const mapKey = action.mapKey;
+        const nextVal = action.mapValue;
+        if (Object.is(mapObj.get(mapKey), nextVal)) return false;
+        mapObj.set(mapKey, nextVal);
+        return true;
+      }
+      if (action.type === APP_ACTIONS.STATE_DELETE_MAP_ENTRY) {
+        const key = String(action.key || "").trim();
+        const mapObj = key ? draft[key] : null;
+        if (!(mapObj instanceof Map)) return false;
+        return mapObj.delete(action.mapKey);
+      }
+      if (action.type === APP_ACTIONS.STATE_ADD_SET_ENTRY) {
+        const key = String(action.key || "").trim();
+        const setObj = key ? draft[key] : null;
+        if (!(setObj instanceof Set)) return false;
+        const sizeBefore = setObj.size;
+        setObj.add(action.setValue);
+        return setObj.size !== sizeBefore;
+      }
+      if (action.type === APP_ACTIONS.STATE_DELETE_SET_ENTRY) {
+        const key = String(action.key || "").trim();
+        const setObj = key ? draft[key] : null;
+        if (!(setObj instanceof Set)) return false;
+        return setObj.delete(action.setValue);
+      }
+      if (action.type === APP_ACTIONS.STATE_CLEAR_CACHE) {
+        const key = String(action.key || "").trim();
+        if (!key) return false;
+        const current = draft[key];
+        if (current instanceof Map) {
+          if (!current.size) return false;
+          draft[key] = new Map();
+          return true;
+        }
+        if (current && typeof current === "object") {
+          draft[key] = {};
+          return true;
+        }
+        return false;
+      }
+      return false;
+    }
+    function shouldRenderForAction(action) {
+      return Boolean(action && action.meta && action.meta.requestRender);
+    }
+    function dispatchAction(action) {
+      return appStore.dispatch(action);
+    }
+    function patchState(patch, meta = null) {
+      return dispatchAction({ type: APP_ACTIONS.STATE_PATCH, patch, meta: meta || undefined });
+    }
+    function setStateValue(key, value, meta = null) {
+      return dispatchAction({ type: APP_ACTIONS.STATE_SET, key, value, meta: meta || undefined });
+    }
+    const initialState = {
       model: null,
+      metricKey: "contrib_pp",
       columnMode: DEFAULT_COLUMN_MODE,
       months: [],
       periodBuckets: [],
@@ -846,6 +960,8 @@
       longPressTriggered: false,
       breakoutContextMenuEl: breakoutContextMenuEl || null,
     };
+    const appStore = createStore(initialState, reduceAppState);
+    const state = appStore.getState();
 
     function setStatus(s) {
       if (!String(s || "").trim()) return;
@@ -855,6 +971,60 @@
       if (!e) return;
       console.error(e);
     }
+    function renderShellFromState() {
+      if (metricEl && METRICS[state.metricKey] && metricEl.value !== state.metricKey) {
+        metricEl.value = state.metricKey;
+      }
+      if (columnsEl && COLUMN_MODES[state.columnMode] && columnsEl.value !== state.columnMode) {
+        columnsEl.value = state.columnMode;
+      }
+      if (coreModeEl) {
+        const nextCoreMode = state.coreMode === "core" ? "core" : "headline";
+        if (coreModeEl.value !== nextCoreMode) coreModeEl.value = nextCoreMode;
+      }
+      if (viewsEl) {
+        const nextView = String(state.selectedViewId || "custom");
+        if ([...viewsEl.options].some((opt) => opt.value === nextView) && viewsEl.value !== nextView) {
+          viewsEl.value = nextView;
+        }
+      }
+      updateCompareControlsVisibility();
+    }
+    let renderScheduled = false;
+    function flushRequestedRender() {
+      renderScheduled = false;
+      if (!state.model) return;
+      renderShellFromState();
+      renderPivot();
+    }
+    function requestRender(reason = "") {
+      if (state.isApplyingSnapshot) return;
+      if (renderScheduled) return;
+      renderScheduled = true;
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => flushRequestedRender());
+        return;
+      }
+      setTimeout(() => flushRequestedRender(), 0);
+    }
+    function runAfterRender(callback) {
+      if (typeof callback !== "function") return;
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            try { callback(); } catch (_) {}
+          });
+        });
+        return;
+      }
+      setTimeout(() => {
+        try { callback(); } catch (_) {}
+      }, 0);
+    }
+    appStore.subscribe((_, action) => {
+      if (!shouldRenderForAction(action)) return;
+      requestRender(action && action.meta ? action.meta.reason || action.type : "");
+    });
 
     function ymToTimePeriod(ym) { // "YYYY-MM" -> "YYYYMmm"
       const [y, m] = ym.split("-");
@@ -914,7 +1084,7 @@
     }
 
     function isCompareGroupingSelected() {
-      return String(columnsEl.value || "") === "compare";
+      return String(state.columnMode || "") === "compare";
     }
 
     function isCompareGroupingMode() {
@@ -1081,14 +1251,15 @@
     function handleTableLayoutViewportChange() {
       const nextMobilePortrait = isMobilePortraitTableLayout();
       if (state.tableMobilePortrait === nextMobilePortrait) return;
-      state.tableMobilePortrait = nextMobilePortrait;
-      state.tableColumnsSignature = "";
-      if (state.model) renderPivot();
+      patchState(
+        { tableMobilePortrait: nextMobilePortrait, tableColumnsSignature: "" },
+        { requestRender: Boolean(state.model), reason: "table-layout-viewport-change" }
+      );
     }
 
     function bindTableLayoutViewportWatcher() {
       if (state.tableLayoutWatcherBound || typeof window === "undefined") return;
-      state.tableLayoutWatcherBound = true;
+      setStateValue("tableLayoutWatcherBound", true);
       window.addEventListener("resize", handleTableLayoutViewportChange);
       window.addEventListener("orientationchange", handleTableLayoutViewportChange);
     }
@@ -1137,7 +1308,7 @@
 
       setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareRange.compareStartYM);
       setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareRange.compareEndYM);
-      state.compareRangeInitialized = true;
+      setStateValue("compareRangeInitialized", true);
       return true;
     }
 
@@ -1790,10 +1961,14 @@
         next.push(v);
       }
       if (!next.length) {
-        return state.childOrderByParent.delete(key);
+        return dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "childOrderByParent", mapKey: key });
       }
-      state.childOrderByParent.set(key, next);
-      return true;
+      return dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "childOrderByParent",
+        mapKey: key,
+        mapValue: next,
+      });
     }
 
     function removeChildFromParentOrder(parentLine, childLine) {
@@ -1819,10 +1994,12 @@
     }
 
     function incrementBreakoutVersion() {
-      state.breakoutVersion = (Number(state.breakoutVersion) || 0) + 1;
-      state.breakoutEnabled = hasActiveBreakoutStructure();
+      patchState({
+        breakoutVersion: (Number(state.breakoutVersion) || 0) + 1,
+        breakoutEnabled: hasActiveBreakoutStructure(),
+      });
       if (state.model) clearModelComputationCaches(state.model);
-      state.chartSeriesCache = new Map();
+      setStateValue("chartSeriesCache", new Map());
     }
 
     function isBreakoutCategoryLine(line) {
@@ -1859,13 +2036,15 @@
     }
 
     function allocateBreakoutCategoryLine() {
-      state.breakoutVirtualLineSeq = (Number(state.breakoutVirtualLineSeq) || 0) + 1;
-      return -state.breakoutVirtualLineSeq;
+      const next = (Number(state.breakoutVirtualLineSeq) || 0) + 1;
+      setStateValue("breakoutVirtualLineSeq", next);
+      return -next;
     }
 
     function nextBreakoutCategoryId() {
-      state.breakoutCategorySeq = (Number(state.breakoutCategorySeq) || 0) + 1;
-      return `cat_${state.breakoutCategorySeq}`;
+      const next = (Number(state.breakoutCategorySeq) || 0) + 1;
+      setStateValue("breakoutCategorySeq", next);
+      return `cat_${next}`;
     }
 
     function sanitizeBreakoutLabel(label, fallback = "Category") {
@@ -1897,7 +2076,12 @@
       const v = Number(line);
       const clean = sanitizeBreakoutLabel(label, "");
       if (!clean) return false;
-      state.labelAliasesByLine.set(v, clean);
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "labelAliasesByLine",
+        mapKey: v,
+        mapValue: clean,
+      });
       incrementBreakoutVersion();
       return true;
     }
@@ -1905,18 +2089,24 @@
     function clearLineAlias(line) {
       const v = Number(line);
       if (!Number.isFinite(v)) return false;
-      const changed = state.labelAliasesByLine.delete(v);
+      const changed = dispatchAction({
+        type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY,
+        key: "labelAliasesByLine",
+        mapKey: v,
+      });
       if (changed) incrementBreakoutVersion();
       return changed;
     }
 
     function clearInlineEditState({ keepFocusLine = false } = {}) {
       const line = Number.isFinite(state.inlineEditLine) ? Number(state.inlineEditLine) : null;
-      state.inlineEditLine = null;
-      state.inlineEditDraft = "";
-      state.inlineEditMode = "";
-      state.inlineEditCreatedCategoryLine = null;
-      if (!keepFocusLine) state.inlineEditReturnFocusLine = null;
+      patchState({
+        inlineEditLine: null,
+        inlineEditDraft: "",
+        inlineEditMode: "",
+        inlineEditCreatedCategoryLine: null,
+        inlineEditReturnFocusLine: keepFocusLine ? state.inlineEditReturnFocusLine : null,
+      });
       return line;
     }
 
@@ -1943,14 +2133,16 @@
       const targetLine = Number(line);
       const existingAlias = getLineAlias(targetLine);
       const baseLabel = getLineDisplayLabel(state.model, targetLine, "");
-      state.inlineEditLine = targetLine;
-      state.inlineEditDraft = existingAlias || baseLabel;
-      state.inlineEditMode = String(mode || "rename");
-      state.inlineEditCreatedCategoryLine = Number.isFinite(createdCategoryLine) ? Number(createdCategoryLine) : null;
-      state.inlineEditReturnFocusLine = targetLine;
+      patchState({
+        inlineEditLine: targetLine,
+        inlineEditDraft: existingAlias || baseLabel,
+        inlineEditMode: String(mode || "rename"),
+        inlineEditCreatedCategoryLine: Number.isFinite(createdCategoryLine) ? Number(createdCategoryLine) : null,
+        inlineEditReturnFocusLine: targetLine,
+      });
       closeBreakoutContextMenu();
-      renderPivot();
-      setTimeout(() => focusInlineEditInputForLine(targetLine), 0);
+      requestRender("inline-edit-begin");
+      runAfterRender(() => focusInlineEditInputForLine(targetLine));
       return true;
     }
 
@@ -1970,10 +2162,29 @@
           const nextLabel = sanitizeBreakoutLabel(clean, def.label || "Category");
           let changed = false;
           if (def.label !== nextLabel) {
-            def.label = nextLabel;
+            const updatedDef = { ...def, label: nextLabel };
+            dispatchAction({
+              type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+              key: "breakoutCategoryByLine",
+              mapKey: line,
+              mapValue: updatedDef,
+            });
+            const siblings = getBreakoutCategoriesForParent(def.parentLine).map((item) => (
+              Number(item.line) === Number(updatedDef.line) ? updatedDef : item
+            ));
+            dispatchAction({
+              type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+              key: "breakoutCategoriesByParent",
+              mapKey: def.parentLine,
+              mapValue: siblings,
+            });
             changed = true;
           }
-          if (state.labelAliasesByLine.delete(line)) changed = true;
+          if (dispatchAction({
+            type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY,
+            key: "labelAliasesByLine",
+            mapKey: line,
+          })) changed = true;
           if (changed) incrementBreakoutVersion();
         } else {
           setLineAlias(state.model, line, clean);
@@ -1982,27 +2193,26 @@
         setLineAlias(state.model, line, clean);
       }
       clearInlineEditState({ keepFocusLine: true });
-      renderPivot();
-      setTimeout(() => focusLabelButtonForLine(line), 0);
+      requestRender("inline-edit-commit");
+      runAfterRender(() => focusLabelButtonForLine(line));
       return true;
     }
 
     function cancelInlineEdit() {
       const line = clearInlineEditState({ keepFocusLine: true });
       if (Number.isFinite(line)) {
-        renderPivot();
-        setTimeout(() => focusLabelButtonForLine(line), 0);
+        requestRender("inline-edit-cancel");
+        runAfterRender(() => focusLabelButtonForLine(line));
       }
       return true;
     }
 
     function closeBreakoutContextMenu() {
-      state.contextMenu.open = false;
-      state.contextMenu.line = null;
-      state.contextMenu.x = 0;
-      state.contextMenu.y = 0;
-      state.longPressTriggered = false;
-      state.longPressLine = null;
+      patchState({
+        contextMenu: { open: false, x: 0, y: 0, line: null },
+        longPressTriggered: false,
+        longPressLine: null,
+      });
       if (state.breakoutContextMenuEl) {
         state.breakoutContextMenuEl.hidden = true;
         state.breakoutContextMenuEl.setAttribute("aria-hidden", "true");
@@ -2055,8 +2265,6 @@
       menu.innerHTML = html;
       menu.hidden = false;
       menu.setAttribute("aria-hidden", "false");
-      state.contextMenu.open = true;
-      state.contextMenu.line = v;
 
       let px = Number(x);
       let py = Number(y);
@@ -2067,8 +2275,7 @@
       }
       if (!Number.isFinite(px)) px = 12;
       if (!Number.isFinite(py)) py = 12;
-      state.contextMenu.x = px;
-      state.contextMenu.y = py;
+      patchState({ contextMenu: { open: true, line: v, x: px, y: py } });
       positionBreakoutContextMenu(px, py);
       return true;
     }
@@ -2094,8 +2301,8 @@
       if (key === "reset") {
         clearLineAlias(v);
         closeBreakoutContextMenu();
-        renderPivot();
-        setTimeout(() => focusLabelButtonForLine(v), 0);
+        requestRender("context-reset-label");
+        runAfterRender(() => focusLabelButtonForLine(v));
         return;
       }
       if (key === "delete" && isBreakoutCategoryLine(v)) {
@@ -2113,7 +2320,7 @@
       let cur = Number(line);
       while (isKnownTreeLine(model, cur) && !seen.has(cur)) {
         seen.add(cur);
-        state.expanded.add(cur);
+        dispatchAction({ type: APP_ACTIONS.STATE_ADD_SET_ENTRY, key: "expanded", setValue: cur });
         const parent = getEffectiveParentLine(model, cur);
         if (!Number.isFinite(parent)) break;
         cur = parent;
@@ -2143,10 +2350,25 @@
       };
 
       const next = [...cats, def].sort((a, b) => (a.order - b.order) || (a.line - b.line));
-      state.breakoutCategoriesByParent.set(def.parentLine, next);
-      state.breakoutCategoryByLine.set(def.line, def);
-      state.breakoutCategoryLineById.set(def.id, def.line);
-      state.breakoutVirtualLineSeq = Math.max(state.breakoutVirtualLineSeq, Math.abs(def.line));
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "breakoutCategoriesByParent",
+        mapKey: def.parentLine,
+        mapValue: next,
+      });
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "breakoutCategoryByLine",
+        mapKey: def.line,
+        mapValue: def,
+      });
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "breakoutCategoryLineById",
+        mapKey: def.id,
+        mapValue: def.line,
+      });
+      setStateValue("breakoutVirtualLineSeq", Math.max(state.breakoutVirtualLineSeq, Math.abs(def.line)));
       return def;
     }
 
@@ -2168,15 +2390,27 @@
         const def = getBreakoutCategory(line);
         if (!def) continue;
         removeChildFromParentOrder(def.parentLine, def.line);
-        state.childOrderByParent.delete(def.line);
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "childOrderByParent", mapKey: def.line });
         const siblings = getBreakoutCategoriesForParent(def.parentLine).filter((c) => c.line !== def.line);
-        if (siblings.length) state.breakoutCategoriesByParent.set(def.parentLine, siblings);
-        else state.breakoutCategoriesByParent.delete(def.parentLine);
-        state.breakoutCategoryByLine.delete(def.line);
-        state.breakoutCategoryLineById.delete(def.id);
-        state.plotSelectedByLine.delete(def.line);
-        state.labelAliasesByLine.delete(def.line);
-        state.expanded.delete(def.line);
+        if (siblings.length) {
+          dispatchAction({
+            type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+            key: "breakoutCategoriesByParent",
+            mapKey: def.parentLine,
+            mapValue: siblings,
+          });
+        } else {
+          dispatchAction({
+            type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY,
+            key: "breakoutCategoriesByParent",
+            mapKey: def.parentLine,
+          });
+        }
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "breakoutCategoryByLine", mapKey: def.line });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "breakoutCategoryLineById", mapKey: def.id });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "plotSelectedByLine", mapKey: def.line });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "labelAliasesByLine", mapKey: def.line });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_SET_ENTRY, key: "expanded", setValue: def.line });
       }
 
       if (Number.isFinite(state.inlineEditLine) && toDelete.has(Number(state.inlineEditLine))) {
@@ -2186,30 +2420,32 @@
       for (const [line, entry] of [...state.reparentByLine.entries()]) {
         const targetLine = getReparentTargetLine(entry);
         if (Number.isFinite(targetLine) && toDelete.has(Number(targetLine))) {
-          state.reparentByLine.delete(line);
+          dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "reparentByLine", mapKey: line });
         }
       }
       sanitizeChildOrderMapForModel(state.model);
 
       incrementBreakoutVersion();
-      renderPivot();
+      requestRender("context-action-applied");
       return true;
     }
 
     function clearAllBreakoutState() {
       for (const line of state.breakoutCategoryByLine.keys()) {
-        state.plotSelectedByLine.delete(line);
-        state.expanded.delete(line);
-        state.labelAliasesByLine.delete(line);
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "plotSelectedByLine", mapKey: line });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_SET_ENTRY, key: "expanded", setValue: line });
+        dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "labelAliasesByLine", mapKey: line });
       }
-      state.breakoutCategoriesByParent = new Map();
-      state.breakoutCategoryByLine = new Map();
-      state.breakoutCategoryLineById = new Map();
-      state.reparentByLine = new Map();
-      state.childOrderByParent = new Map();
+      patchState({
+        breakoutCategoriesByParent: new Map(),
+        breakoutCategoryByLine: new Map(),
+        breakoutCategoryLineById: new Map(),
+        reparentByLine: new Map(),
+        childOrderByParent: new Map(),
+      });
       clearInlineEditState();
       incrementBreakoutVersion();
-      if (state.model) renderPivot();
+      if (state.model) requestRender("breakout-cleared");
     }
 
     function getStructuralParentLine(model, line) {
@@ -2360,7 +2596,7 @@
         }
         if (cleaned.length) next.set(parentLine, cleaned);
       }
-      state.childOrderByParent = next;
+      setStateValue("childOrderByParent", next);
     }
 
     function isLineAffectedByReparentSubtree(model, line) {
@@ -2427,18 +2663,46 @@
         if (!def) return false;
         const prevCategoryParent = Number(def.parentLine);
         const oldSiblings = getBreakoutCategoriesForParent(prevCategoryParent).filter((c) => c.line !== source);
-        if (oldSiblings.length) state.breakoutCategoriesByParent.set(prevCategoryParent, oldSiblings);
-        else state.breakoutCategoriesByParent.delete(prevCategoryParent);
-        def.parentLine = target;
-        const nextSiblings = [...getBreakoutCategoriesForParent(target), def].sort((a, b) => {
+        if (oldSiblings.length) {
+          dispatchAction({
+            type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+            key: "breakoutCategoriesByParent",
+            mapKey: prevCategoryParent,
+            mapValue: oldSiblings,
+          });
+        } else {
+          dispatchAction({
+            type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY,
+            key: "breakoutCategoriesByParent",
+            mapKey: prevCategoryParent,
+          });
+        }
+        const updatedDef = { ...def, parentLine: target };
+        const nextSiblings = [...getBreakoutCategoriesForParent(target), updatedDef].sort((a, b) => {
           const oa = Number.isFinite(a.order) ? a.order : 0;
           const ob = Number.isFinite(b.order) ? b.order : 0;
           if (oa !== ob) return oa - ob;
           return a.line - b.line;
         });
-        state.breakoutCategoriesByParent.set(target, nextSiblings);
+        dispatchAction({
+          type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+          key: "breakoutCategoryByLine",
+          mapKey: source,
+          mapValue: updatedDef,
+        });
+        dispatchAction({
+          type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+          key: "breakoutCategoriesByParent",
+          mapKey: target,
+          mapValue: nextSiblings,
+        });
       } else {
-        state.reparentByLine.set(source, { targetLine: target });
+        dispatchAction({
+          type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+          key: "reparentByLine",
+          mapKey: source,
+          mapValue: { targetLine: target },
+        });
       }
       if (Number.isFinite(prevParent)) {
         removeChildFromParentOrder(prevParent, source);
@@ -2447,7 +2711,7 @@
       sanitizeChildOrderMapForModel(model);
       ensureLineExpandedInDisplay(model, target);
       incrementBreakoutVersion();
-      renderPivot();
+      requestRender("reparent-applied");
       return true;
     }
 
@@ -2557,22 +2821,24 @@
         validReparents.set(sourceLine, { targetLine: Number(targetLine) });
       }
 
-      state.breakoutCategoriesByParent = validCategoriesByParent;
-      state.breakoutCategoryByLine = validCategoryByLine;
-      state.breakoutCategoryLineById = validCategoryLineById;
-      state.reparentByLine = validReparents;
-      state.breakoutVirtualLineSeq = maxSeq;
-      state.breakoutCategorySeq = maxIdSeq;
-      state.breakoutEnabled = hasActiveBreakoutStructure();
+      patchState({
+        breakoutCategoriesByParent: validCategoriesByParent,
+        breakoutCategoryByLine: validCategoryByLine,
+        breakoutCategoryLineById: validCategoryLineById,
+        reparentByLine: validReparents,
+        breakoutVirtualLineSeq: maxSeq,
+        breakoutCategorySeq: maxIdSeq,
+        breakoutEnabled: hasActiveBreakoutStructure(),
+      });
 
       for (const [sourceLine, entry] of [...state.reparentByLine.entries()]) {
         const targetLine = getReparentTargetLine(entry);
         if (!Number.isFinite(targetLine)) {
-          state.reparentByLine.delete(sourceLine);
+          dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "reparentByLine", mapKey: sourceLine });
           continue;
         }
         if (isDescendantOrSelfInDisplay(model, targetLine, sourceLine)) {
-          state.reparentByLine.delete(sourceLine);
+          dispatchAction({ type: APP_ACTIONS.STATE_DELETE_MAP_ENTRY, key: "reparentByLine", mapKey: sourceLine });
         }
       }
       sanitizeChildOrderMapForModel(model);
@@ -2585,7 +2851,7 @@
           nextSelection.set(line, Boolean(selected));
         }
       }
-      state.plotSelectedByLine = nextSelection;
+      setStateValue("plotSelectedByLine", nextSelection);
 
       const nextAliases = new Map();
       for (const [lineRaw, alias] of state.labelAliasesByLine.entries()) {
@@ -2597,7 +2863,7 @@
           nextAliases.set(line, clean);
         }
       }
-      state.labelAliasesByLine = nextAliases;
+      setStateValue("labelAliasesByLine", nextAliases);
 
       if (state.contextMenu.open && !isAliasableLine(model, state.contextMenu.line)) {
         closeBreakoutContextMenu();
@@ -2725,14 +2991,16 @@
       const childOrdersPayload = payload.childOrders && typeof payload.childOrders === "object" ? payload.childOrders : {};
       const categoryRows = Array.isArray(payload.categories) ? payload.categories : [];
 
-      state.breakoutCategoriesByParent = new Map();
-      state.breakoutCategoryByLine = new Map();
-      state.breakoutCategoryLineById = new Map();
-      state.reparentByLine = new Map();
-      state.childOrderByParent = new Map();
-      state.labelAliasesByLine = new Map();
-      state.breakoutVirtualLineSeq = 0;
-      state.breakoutCategorySeq = 0;
+      patchState({
+        breakoutCategoriesByParent: new Map(),
+        breakoutCategoryByLine: new Map(),
+        breakoutCategoryLineById: new Map(),
+        reparentByLine: new Map(),
+        childOrderByParent: new Map(),
+        labelAliasesByLine: new Map(),
+        breakoutVirtualLineSeq: 0,
+        breakoutCategorySeq: 0,
+      });
 
       const categoryLineById = new Map();
       const pending = [];
@@ -2786,7 +3054,7 @@
         if (!canReparentNode(model, sourceLine, targetLine)) continue;
         nextReparents.set(sourceLine, { targetLine });
       }
-      state.reparentByLine = nextReparents;
+      setStateValue("reparentByLine", nextReparents);
 
       for (const [parentRaw, rows] of Object.entries(childOrdersPayload)) {
         const parentLine = Number(parentRaw);
@@ -2799,7 +3067,14 @@
           seen.add(line);
           cleaned.push(line);
         }
-        if (cleaned.length) state.childOrderByParent.set(parentLine, cleaned);
+        if (cleaned.length) {
+          dispatchAction({
+            type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+            key: "childOrderByParent",
+            mapKey: parentLine,
+            mapValue: cleaned,
+          });
+        }
       }
 
       for (const [lineRaw, aliasRaw] of Object.entries(aliases)) {
@@ -2807,7 +3082,12 @@
         const alias = sanitizeBreakoutLabel(aliasRaw, "");
         if (!Number.isFinite(line) || !alias) continue;
         if (!isAliasableLine(model, line)) continue;
-        state.labelAliasesByLine.set(line, alias);
+        dispatchAction({
+          type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+          key: "labelAliasesByLine",
+          mapKey: line,
+          mapValue: alias,
+        });
       }
 
       sanitizeBreakoutStateForModel(model);
@@ -2820,9 +3100,9 @@
       const endYM = composeYmFromSelectors(endMonthEl, endYearEl);
       const compareStartYM = composeYmFromSelectors(compareStartMonthEl, compareStartYearEl);
       const compareEndYM = composeYmFromSelectors(compareEndMonthEl, compareEndYearEl);
-      const metricKey = METRICS[metricEl.value] ? metricEl.value : "contrib_pp";
-      const grouping = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
-      const indexMode = (coreModeEl.value === "core") ? "core" : "headline";
+      const metricKey = METRICS[state.metricKey] ? state.metricKey : "contrib_pp";
+      const grouping = COLUMN_MODES[state.columnMode] ? state.columnMode : DEFAULT_COLUMN_MODE;
+      const indexMode = state.coreMode === "core" ? "core" : "headline";
       const mainDatePolicy = state.mainRangeUserEdited
         ? { mode: "explicit", startYM, endYM }
         : { mode: "default" };
@@ -2870,29 +3150,30 @@
     function resetSnapshotManagedState(model) {
       clearInlineEditState();
       closeBreakoutContextMenu();
-      state.longPressLine = null;
-      state.longPressTriggered = false;
+      patchState({ longPressLine: null, longPressTriggered: false });
       if (state.longPressTimer) {
         clearTimeout(state.longPressTimer);
-        state.longPressTimer = null;
+        setStateValue("longPressTimer", null);
       }
-      state.breakoutCategoriesByParent = new Map();
-      state.breakoutCategoryByLine = new Map();
-      state.breakoutCategoryLineById = new Map();
-      state.reparentByLine = new Map();
-      state.childOrderByParent = new Map();
-      state.labelAliasesByLine = new Map();
-      state.plotSelectedByLine = new Map();
-      state.plotResidualExcluded = true;
-      state.plotStackOrderTopToBottom = [];
-      state.plotStackOrderVersion += 1;
-      state.breakoutCategorySeq = 0;
-      state.breakoutVirtualLineSeq = 0;
-      state.expanded = new Set();
-      state.activeParentLine = model && model.metaByLine.has(model.rootLine) ? model.rootLine : null;
-      state.compareRangeInitialized = false;
-      state.compareRangeUserEdited = false;
-      state.mainRangeUserEdited = false;
+      patchState({
+        breakoutCategoriesByParent: new Map(),
+        breakoutCategoryByLine: new Map(),
+        breakoutCategoryLineById: new Map(),
+        reparentByLine: new Map(),
+        childOrderByParent: new Map(),
+        labelAliasesByLine: new Map(),
+        plotSelectedByLine: new Map(),
+        plotResidualExcluded: true,
+        plotStackOrderTopToBottom: [],
+        plotStackOrderVersion: state.plotStackOrderVersion + 1,
+        breakoutCategorySeq: 0,
+        breakoutVirtualLineSeq: 0,
+        expanded: new Set(),
+        activeParentLine: model && model.metaByLine.has(model.rootLine) ? model.rootLine : null,
+        compareRangeInitialized: false,
+        compareRangeUserEdited: false,
+        mainRangeUserEdited: false,
+      });
     }
 
     function applyAppSnapshotPayload(payload, model) {
@@ -2922,7 +3203,7 @@
         setStatus("Warning: dataset fingerprint mismatch. Applying snapshot.");
       }
 
-      state.isApplyingSnapshot = true;
+      setStateValue("isApplyingSnapshot", true);
       try {
         resetSnapshotManagedState(model);
 
@@ -2943,12 +3224,12 @@
           if (!mainDefault || !isValidYmString(mainDefault.startYM) || !isValidYmString(mainDefault.endYM)) return false;
           startYM = mainDefault.startYM;
           endYM = mainDefault.endYM;
-          state.mainRangeUserEdited = false;
+          setStateValue("mainRangeUserEdited", false);
         } else {
           startYM = String(mainPolicy.startYM || "");
           endYM = String(mainPolicy.endYM || "");
           if (!isValidYmString(startYM) || !isValidYmString(endYM) || startYM > endYM) return false;
-          state.mainRangeUserEdited = true;
+          setStateValue("mainRangeUserEdited", true);
         }
 
         const grouping = COLUMN_MODES[controls.grouping] ? String(controls.grouping) : DEFAULT_COLUMN_MODE;
@@ -2963,16 +3244,18 @@
           if (!isValidYmString(compareStartYM) || !isValidYmString(compareEndYM) || compareStartYM > compareEndYM) return false;
           setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, compareStartYM);
           setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, compareEndYM);
-          state.compareRangeInitialized = true;
-          state.compareRangeUserEdited = true;
+          patchState({ compareRangeInitialized: true, compareRangeUserEdited: true });
         } else {
-          state.compareRangeInitialized = false;
-          state.compareRangeUserEdited = false;
+          patchState({ compareRangeInitialized: false, compareRangeUserEdited: false });
         }
+        patchState({
+          metricKey: metric,
+          columnMode: grouping,
+          coreMode: indexMode,
+        });
         metricEl.value = metric;
         columnsEl.value = grouping;
         coreModeEl.value = indexMode;
-        state.coreMode = indexMode;
         updateCompareControlsVisibility();
 
         if (!applyBreakoutSnapshotState(breakout, model)) return false;
@@ -2986,7 +3269,7 @@
         if (isCoreEnabled() && isExcludedInCore(nextActiveParent, model)) {
           nextActiveParent = findNearestIncludedAncestor(model, nextActiveParent);
         }
-        state.activeParentLine = nextActiveParent;
+        setStateValue("activeParentLine", nextActiveParent);
 
         const nextExpanded = new Set([nextActiveParent]);
         const expandedLines = Array.isArray(view.expandedLines) ? view.expandedLines : [];
@@ -2997,7 +3280,7 @@
           if (model.metaByLine.has(line) && isExcludedInCore(line, model)) continue;
           nextExpanded.add(line);
         }
-        state.expanded = nextExpanded;
+        setStateValue("expanded", nextExpanded);
         pruneExpandedToActiveParent(model);
 
         const selectionObj = view.plotSelectionByLine && typeof view.plotSelectionByLine === "object"
@@ -3009,10 +3292,10 @@
           if (!Number.isFinite(line) || !isKnownTreeLine(model, line)) continue;
           nextPlotSelection.set(line, Boolean(selected));
         }
-        state.plotSelectedByLine = nextPlotSelection;
+        setStateValue("plotSelectedByLine", nextPlotSelection);
         prunePlotSelectionToModel(model);
 
-        state.plotResidualExcluded = Boolean(view.plotResidualExcluded);
+        setStateValue("plotResidualExcluded", Boolean(view.plotResidualExcluded));
         const nextStackOrder = [];
         const stackOrder = Array.isArray(view.plotStackOrderTopToBottom) ? view.plotStackOrderTopToBottom : [];
         const seenIds = new Set();
@@ -3022,14 +3305,16 @@
           seenIds.add(id);
           nextStackOrder.push(id);
         }
-        state.plotStackOrderTopToBottom = nextStackOrder;
-        state.plotStackOrderVersion += 1;
-        state.chartSeriesCache = new Map();
-        renderPivot();
+        patchState({
+          plotStackOrderTopToBottom: nextStackOrder,
+          plotStackOrderVersion: state.plotStackOrderVersion + 1,
+          chartSeriesCache: new Map(),
+        });
         updateParentNavControlState();
       } finally {
-        state.isApplyingSnapshot = false;
+        setStateValue("isApplyingSnapshot", false);
       }
+      requestRender("snapshot-applied");
       return true;
     }
 
@@ -3113,7 +3398,12 @@
       if (!isValidAppSnapshotEnvelope(payload)) {
         throw new Error(`Invalid snapshot schema for view "${preset.label}" (${preset.path}).`);
       }
-      state.viewPayloadCache.set(key, payload);
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "viewPayloadCache",
+        mapKey: key,
+        mapValue: payload,
+      });
       return payload;
     }
 
@@ -3121,10 +3411,9 @@
       const key = String(viewId || "").trim() || "custom";
       if (key === "custom") {
         if (!state.model && state.pendingSnapshotSource === "view_preset") {
-          state.pendingSnapshotPayload = null;
-          state.pendingSnapshotSource = null;
+          patchState({ pendingSnapshotPayload: null, pendingSnapshotSource: null });
         }
-        state.selectedViewId = "custom";
+        setStateValue("selectedViewId", "custom");
         if (viewsEl) viewsEl.value = "custom";
         return true;
       }
@@ -3132,9 +3421,11 @@
       if (!preset) throw new Error(`Unknown view preset: ${key}`);
       const payload = await loadViewPresetPayload(key);
       if (!state.model) {
-        state.pendingSnapshotPayload = payload;
-        state.pendingSnapshotSource = "view_preset";
-        state.selectedViewId = key;
+        patchState({
+          pendingSnapshotPayload: payload,
+          pendingSnapshotSource: "view_preset",
+          selectedViewId: key,
+        });
         if (viewsEl) viewsEl.value = key;
         setStatus(`View queued: ${preset.label}. It will apply after data loads.`);
         return true;
@@ -3143,7 +3434,7 @@
       if (!ok) {
         throw new Error(`Failed to apply view "${preset.label}" from ${preset.path}.`);
       }
-      state.selectedViewId = key;
+      setStateValue("selectedViewId", key);
       if (viewsEl) viewsEl.value = key;
       setStatus(`View applied: ${preset.label}.`);
       return true;
@@ -3337,7 +3628,7 @@
         next.add(line);
       }
       next.add(activeParentLine);
-      state.expanded = next;
+      setStateValue("expanded", next);
     }
 
     function getAverageWeightToParent(model, line, parentLine, tp) {
@@ -3679,10 +3970,9 @@
     function setActiveParentLine(line, model) {
       if (!model || !model.metaByLine.has(line)) return;
       if (isExcludedInCore(line, model)) return;
-      state.activeParentLine = line;
+      setStateValue("activeParentLine", line);
       pruneExpandedToActiveParent(model);
-      state.chartSeriesCache = new Map();
-      renderPivot();
+      patchState({ chartSeriesCache: new Map() }, { requestRender: true, reason: "active-parent-changed" });
     }
 
     function getImmediateParentLine(model, line) {
@@ -4009,7 +4299,12 @@
     }
 
     function setLineSelectedForPlot(line, checked) {
-      state.plotSelectedByLine.set(line, Boolean(checked));
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "plotSelectedByLine",
+        mapKey: line,
+        mapValue: Boolean(checked),
+      });
     }
 
     function getPlotToggleTargets(model, line, { includeSelf = true } = {}) {
@@ -4054,7 +4349,7 @@
       for (const [line, selected] of state.plotSelectedByLine.entries()) {
         if (model.metaByLine.has(line) || isBreakoutCategoryLine(line)) next.set(line, selected);
       }
-      state.plotSelectedByLine = next;
+      setStateValue("plotSelectedByLine", next);
     }
 
     function ensureVisibleSelectionDefaults(visibleRows, model) {
@@ -4063,11 +4358,16 @@
         if (row.type !== "component") continue;
         if (row.line === model.rootLine) continue;
         if (!state.plotSelectedByLine.has(row.line)) {
-          state.plotSelectedByLine.set(row.line, true);
+          dispatchAction({
+            type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+            key: "plotSelectedByLine",
+            mapKey: row.line,
+            mapValue: true,
+          });
           changed = true;
         }
       }
-      if (changed) state.chartSeriesCache = new Map();
+      if (changed) setStateValue("chartSeriesCache", new Map());
     }
 
     function buildSelectionSignatureForModel(model) {
@@ -4138,8 +4438,10 @@
       const prev = state.plotStackOrderTopToBottom;
       const changed = (prev.length !== next.length) || prev.some((id, idx) => id !== next[idx]);
       if (changed) {
-        state.plotStackOrderTopToBottom = next;
-        state.plotStackOrderVersion += 1;
+        patchState({
+          plotStackOrderTopToBottom: next,
+          plotStackOrderVersion: state.plotStackOrderVersion + 1,
+        });
       }
     }
 
@@ -4157,8 +4459,10 @@
       arr.splice(fromIdx, 1);
       arr.splice(toIdx, 0, seriesId);
 
-      state.plotStackOrderTopToBottom = arr;
-      state.plotStackOrderVersion += 1;
+      patchState({
+        plotStackOrderTopToBottom: arr,
+        plotStackOrderVersion: state.plotStackOrderVersion + 1,
+      });
       return true;
     }
 
@@ -4213,9 +4517,11 @@
     }
 
     function clearLegendDragState() {
-      state.dragSeriesId = null;
-      state.dragOverSeriesId = null;
-      state.dragOverPlacement = null;
+      patchState({
+        dragSeriesId: null,
+        dragOverSeriesId: null,
+        dragOverPlacement: null,
+      });
       applyLegendDragIndicators();
     }
 
@@ -4244,10 +4550,12 @@
     }
 
     function clearBreakoutDragState() {
-      state.breakoutDragLine = null;
-      state.breakoutDragOverTargetLine = null;
-      state.breakoutDragOverPlacement = null;
-      state.breakoutDragMode = null;
+      patchState({
+        breakoutDragLine: null,
+        breakoutDragOverTargetLine: null,
+        breakoutDragOverPlacement: null,
+        breakoutDragMode: null,
+      });
       applyBreakoutDragIndicators();
     }
 
@@ -4300,7 +4608,7 @@
       setChildOrderForParent(parentLine, without);
       sanitizeChildOrderMapForModel(model);
       incrementBreakoutVersion();
-      renderPivot();
+      requestRender("sibling-reordered");
       return true;
     }
 
@@ -4430,7 +4738,12 @@
       }
       if (!color) color = pickDistinctFallbackColor(seriesId, usedColors);
 
-      state.seriesColorById.set(seriesId, color);
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "seriesColorById",
+        mapKey: seriesId,
+        mapValue: color,
+      });
       return color;
     }
 
@@ -5213,7 +5526,12 @@
         s.color = getSeriesColor(s.id);
       }
 
-      state.chartSeriesCache.set(cacheKey, series);
+      dispatchAction({
+        type: APP_ACTIONS.STATE_SET_MAP_ENTRY,
+        key: "chartSeriesCache",
+        mapKey: cacheKey,
+        mapValue: series,
+      });
       return series;
     }
 
@@ -5228,12 +5546,11 @@
 
       if (state.tableInstance) {
         try { state.tableInstance.destroy(); } catch (_) {}
-        state.tableInstance = null;
-        state.tableColumnsSignature = "";
+        patchState({ tableInstance: null, tableColumnsSignature: "" });
       }
       if (state.chartInstance) {
         try { state.chartInstance.dispose(); } catch (_) {}
-        state.chartInstance = null;
+        setStateValue("chartInstance", null);
       }
 
       outEl.innerHTML = `
@@ -5253,10 +5570,12 @@
         </section>
       `;
 
-      state.tableHostEl = document.getElementById("quantTableHost");
-      state.chartHostEl = document.getElementById("quantChartHost");
-      state.legendHostEl = document.getElementById("quantLegendHost");
-      state.chartWrapEl = document.getElementById("quantChartWrap");
+      patchState({
+        tableHostEl: document.getElementById("quantTableHost"),
+        chartHostEl: document.getElementById("quantChartHost"),
+        legendHostEl: document.getElementById("quantLegendHost"),
+        chartWrapEl: document.getElementById("quantChartWrap"),
+      });
     }
 
     function getBucketFieldKey(index) {
@@ -5620,7 +5939,7 @@
       }
 
       const mobilePortrait = isMobilePortraitTableLayout();
-      state.tableMobilePortrait = mobilePortrait;
+      setStateValue("tableMobilePortrait", mobilePortrait);
       state.tableHostEl.classList.toggle("mobile-portrait-table", mobilePortrait);
       const rows = buildTableRowsForTabulator(visibleRows, model, periodBuckets, metricKey, activeParentLine);
       const signature = `${metricKey}|${periodBuckets.map((b) => b.id).join("|")}|mobilePortrait:${mobilePortrait ? 1 : 0}`;
@@ -5629,7 +5948,7 @@
         if (state.tableInstance) {
           try { state.tableInstance.destroy(); } catch (_) {}
         }
-        state.tableInstance = new Tabulator(state.tableHostEl, {
+        const nextTableInstance = new Tabulator(state.tableHostEl, {
           data: rows,
           columns: buildTableColumnsForTabulator(periodBuckets, metricKey, model, mobilePortrait),
           layout: "fitData",
@@ -5651,7 +5970,7 @@
             applyBreakoutDragIndicators();
           },
         });
-        state.tableColumnsSignature = signature;
+        patchState({ tableInstance: nextTableInstance, tableColumnsSignature: signature });
         scheduleApplyPlotCheckboxIndeterminateStates();
         applyBreakoutDragIndicators();
       } else {
@@ -5689,15 +6008,15 @@
       }
       if (state.chartInstance && state.chartInstance.getDom() !== state.chartHostEl) {
         try { state.chartInstance.dispose(); } catch (_) {}
-        state.chartInstance = null;
+        setStateValue("chartInstance", null);
       }
       if (!state.chartInstance) {
-        state.chartInstance = echarts.init(state.chartHostEl, null, { renderer: "canvas" });
+        setStateValue("chartInstance", echarts.init(state.chartHostEl, null, { renderer: "canvas" }));
         if (!state.chartResizeBound) {
           window.addEventListener("resize", () => {
             if (state.chartInstance) state.chartInstance.resize();
           });
-          state.chartResizeBound = true;
+          setStateValue("chartResizeBound", true);
         }
       }
       return state.chartInstance;
@@ -5706,7 +6025,7 @@
     function showChartEmpty(message) {
       if (state.chartInstance) {
         try { state.chartInstance.dispose(); } catch (_) {}
-        state.chartInstance = null;
+        setStateValue("chartInstance", null);
       }
       if (state.chartHostEl) {
         state.chartHostEl.innerHTML = `<div class="chart-empty">${escapeHtml(message || "No chartable data for current selection.")}</div>`;
@@ -6153,7 +6472,9 @@
         return null;
       }
 
-      const columnMode = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
+      const columnMode = COLUMN_MODES[state.columnMode]
+        ? state.columnMode
+        : (COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE);
       let months = monthsA;
       let periodBuckets = [];
       if (columnMode === "compare") {
@@ -6178,7 +6499,7 @@
           }
           return null;
         }
-        state.compareRangeInitialized = true;
+        setStateValue("compareRangeInitialized", true);
 
         periodBuckets = [
           {
@@ -6232,16 +6553,17 @@
         }
       }
 
-      state.columnMode = columnMode;
-      state.months = months;
-      state.periodBuckets = periodBuckets;
-      state.chartSeriesCache = new Map();
+      patchState(
+        {
+          columnMode,
+          months,
+          periodBuckets,
+          chartSeriesCache: new Map(),
+        },
+        { requestRender: Boolean(state.model && !state.isApplyingSnapshot), reason: "date-range-applied" }
+      );
       updateCompareControlsVisibility();
-
-      if (state.model && !state.isApplyingSnapshot) {
-        setError("");
-        renderPivot();
-      }
+      if (state.model && !state.isApplyingSnapshot) setError("");
       return { startYM, endYM, months, periodBuckets, columnMode };
     }
 
@@ -6278,7 +6600,7 @@
       const model = state.model;
       const activeParentLine = getActiveParentLine(model);
       const periodBuckets = state.periodBuckets;
-      const metricKey = metricEl.value;
+      const metricKey = METRICS[state.metricKey] ? state.metricKey : "contrib_pp";
       const columnMode = state.columnMode;
       const visibleRows = buildVisibleRows(model, metricKey);
       ensureVisibleSelectionDefaults(visibleRows, model);
@@ -6304,18 +6626,20 @@
       setError("");
       if (state.tableInstance) {
         try { state.tableInstance.destroy(); } catch (_) {}
-        state.tableInstance = null;
+        setStateValue("tableInstance", null);
       }
       if (state.chartInstance) {
         try { state.chartInstance.dispose(); } catch (_) {}
-        state.chartInstance = null;
+        setStateValue("chartInstance", null);
       }
       outEl.innerHTML = "";
-      state.tableHostEl = null;
-      state.chartHostEl = null;
-      state.legendHostEl = null;
-      state.chartWrapEl = null;
-      state.tableColumnsSignature = "";
+      patchState({
+        tableHostEl: null,
+        chartHostEl: null,
+        legendHostEl: null,
+        chartWrapEl: null,
+        tableColumnsSignature: "",
+      });
       setStatus("Loading...");
       const prevExpanded = new Set(state.expanded);
       const prevActiveParentLine = state.activeParentLine;
@@ -6348,11 +6672,13 @@
         model.nominalBySeries = nominalBySeries;
         resolveNodeSeriesCodes(model);
         const coreResolved = resolveCoreExclusions(model);
-        state.coreExclusionRoots = coreResolved.roots;
-        state.coreExcludedLines = coreResolved.excludedSet;
-        state.coreIdentityStatus = coreResolved.status;
-        state.coreOfficialComparatorByLine = buildCoreOfficialComparatorMap(model);
-        state.coreDeltaEligibleAncestors = buildCoreDeltaEligibleAncestors(model);
+        patchState({
+          coreExclusionRoots: coreResolved.roots,
+          coreExcludedLines: coreResolved.excludedSet,
+          coreIdentityStatus: coreResolved.status,
+          coreOfficialComparatorByLine: buildCoreOfficialComparatorMap(model),
+          coreDeltaEligibleAncestors: buildCoreDeltaEligibleAncestors(model),
+        });
 
         const rootMeta = model.metaByLine.get(model.rootLine);
         const rootNominalSeries = rootMeta ? String(rootMeta.nominalSeriesCode || "").trim() : "";
@@ -6377,8 +6703,7 @@
           setSelectorsFromYm(startMonthEl, startYearEl, detectedDefaultRange.startYM);
           setSelectorsFromYm(endMonthEl, endYearEl, detectedDefaultRange.endYM);
           columnsEl.value = DEFAULT_COLUMN_MODE;
-          state.mainRangeUserEdited = false;
-          state.defaultsInitializedFromData = true;
+          patchState({ mainRangeUserEdited: false, defaultsInitializedFromData: true });
           range = applyDateRangeToView({ showErrors: true });
         } else if (!range) {
           range = applyDateRangeToView({ showErrors: true });
@@ -6388,11 +6713,10 @@
         }
         const { months, periodBuckets, columnMode } = range;
 
-        state.model = model;
+        setStateValue("model", model);
         if (state.pendingSnapshotPayload) {
           const pending = state.pendingSnapshotPayload;
-          state.pendingSnapshotPayload = null;
-          state.pendingSnapshotSource = null;
+          patchState({ pendingSnapshotPayload: null, pendingSnapshotSource: null });
           const applied = applyAppSnapshotPayload(pending, model);
           if (!applied) {
             setError("Invalid page state file.");
@@ -6404,16 +6728,14 @@
         sanitizeBreakoutStateForModel(model);
         prunePlotSelectionToModel(model);
         if (Number.isFinite(prevActiveParentLine) && model.metaByLine.has(prevActiveParentLine)) {
-          state.activeParentLine = prevActiveParentLine;
+          setStateValue("activeParentLine", prevActiveParentLine);
         } else {
-          state.activeParentLine = model.rootLine;
+          setStateValue("activeParentLine", model.rootLine);
         }
         if (isCoreEnabled() && isExcludedInCore(state.activeParentLine, model)) {
-          state.activeParentLine = findNearestIncludedAncestor(model, state.activeParentLine);
+          setStateValue("activeParentLine", findNearestIncludedAncestor(model, state.activeParentLine));
         }
-        state.columnMode = columnMode;
-        state.months = months;
-        state.periodBuckets = periodBuckets;
+        patchState({ columnMode, months, periodBuckets });
         const activeParentLine = getActiveParentLine(model);
         const preservedExpanded = new Set();
         for (const line of prevExpanded) {
@@ -6423,9 +6745,11 @@
           preservedExpanded.add(line);
         }
         preservedExpanded.add(activeParentLine);
-        state.expanded = preservedExpanded;
-        state.chartSeriesCache = new Map();
-        renderPivot();
+        patchState({
+          expanded: preservedExpanded,
+          chartSeriesCache: new Map(),
+        });
+        requestRender("run-loaded");
         updateParentNavControlState();
 
         setStatus(`Loaded ${model.metaByLine.size} components.`);
@@ -6448,16 +6772,16 @@
     setSelectorsFromYm(endMonthEl, endYearEl, def.end);
     setSelectorsFromYm(compareStartMonthEl, compareStartYearEl, def.start);
     setSelectorsFromYm(compareEndMonthEl, compareEndYearEl, def.end);
-    state.mainRangeUserEdited = false;
+    setStateValue("mainRangeUserEdited", false);
     columnsEl.value = DEFAULT_COLUMN_MODE;
     coreModeEl.value = state.coreMode;
-    state.selectedViewId = "custom";
+    patchState({ selectedViewId: "custom", metricKey: metricEl.value || "contrib_pp" });
     if (viewsEl && [...viewsEl.options].some((opt) => opt.value === "custom")) {
       viewsEl.value = "custom";
     }
     updateCompareControlsVisibility();
     bindTableLayoutViewportWatcher();
-    state.tableMobilePortrait = isMobilePortraitTableLayout();
+    setStateValue("tableMobilePortrait", isMobilePortraitTableLayout());
 
     if (viewsEl) {
       viewsEl.addEventListener("change", async () => {
@@ -6468,7 +6792,7 @@
           await applyViewPreset(nextViewId);
         } catch (err) {
           const fallbackViewId = getViewPreset(prevViewId) ? prevViewId : "custom";
-          state.selectedViewId = fallbackViewId;
+          setStateValue("selectedViewId", fallbackViewId);
           viewsEl.value = fallbackViewId;
           setError(err && err.message ? err.message : "Failed to load selected view.");
         }
@@ -6477,10 +6801,12 @@
 
     metricEl.addEventListener("change", () => {
       if (state.isApplyingSnapshot) return;
-      if (state.model) renderPivot();
+      setStateValue("metricKey", METRICS[metricEl.value] ? metricEl.value : "contrib_pp", { requestRender: true, reason: "metric-changed" });
     });
     columnsEl.addEventListener("change", () => {
       if (state.isApplyingSnapshot) return;
+      const nextGrouping = COLUMN_MODES[columnsEl.value] ? columnsEl.value : DEFAULT_COLUMN_MODE;
+      setStateValue("columnMode", nextGrouping);
       updateCompareControlsVisibility();
       if (isCompareGroupingSelected() && (!state.compareRangeInitialized || !state.compareRangeUserEdited)) {
         initializeCompareRangeFromMainRange();
@@ -6492,20 +6818,19 @@
       if (state.isApplyingSnapshot) return;
       const nextMode = (coreModeEl.value === "core") ? "core" : "headline";
       if (state.coreMode === nextMode) return;
-      state.coreMode = nextMode;
+      setStateValue("coreMode", nextMode);
       if (!state.model) return;
 
       if (isCoreEnabled() && isExcludedInCore(state.activeParentLine, state.model)) {
-        state.activeParentLine = findNearestIncludedAncestor(state.model, state.activeParentLine);
+        setStateValue("activeParentLine", findNearestIncludedAncestor(state.model, state.activeParentLine));
       }
       pruneExpandedToActiveParent(state.model);
-      state.chartSeriesCache = new Map();
-      renderPivot();
+      patchState({ chartSeriesCache: new Map() }, { requestRender: true, reason: "core-mode-changed" });
     });
     for (const el of [startMonthEl, startYearEl, endMonthEl, endYearEl]) {
       el.addEventListener("change", () => {
         if (state.isApplyingSnapshot) return;
-        state.mainRangeUserEdited = true;
+        setStateValue("mainRangeUserEdited", true);
         if (isCompareGroupingSelected() && !state.compareRangeUserEdited) {
           initializeCompareRangeFromMainRange();
         }
@@ -6516,8 +6841,7 @@
     for (const el of [compareStartMonthEl, compareStartYearEl, compareEndMonthEl, compareEndYearEl]) {
       el.addEventListener("change", () => {
         if (state.isApplyingSnapshot) return;
-        state.compareRangeUserEdited = true;
-        state.compareRangeInitialized = true;
+        patchState({ compareRangeUserEdited: true, compareRangeInitialized: true });
         if (!state.model || !isCompareGroupingSelected()) return;
         applyDateRangeToView({ showErrors: false });
       });
@@ -6549,8 +6873,7 @@
           .then((text) => {
             const payload = JSON.parse(String(text || "{}"));
             if (!state.model) {
-              state.pendingSnapshotPayload = payload;
-              state.pendingSnapshotSource = "file_import";
+              patchState({ pendingSnapshotPayload: payload, pendingSnapshotSource: "file_import" });
               setStatus("Page state import queued; it will apply after data loads.");
               return;
             }
@@ -6620,38 +6943,39 @@
       const line = Number(labelBtn.getAttribute("data-label-line"));
       if (!Number.isFinite(line)) return;
       if (state.longPressTimer) clearTimeout(state.longPressTimer);
-      state.longPressLine = line;
-      state.longPressTriggered = false;
-      state.longPressTimer = setTimeout(() => {
-        state.longPressTriggered = true;
+      const longPressTimer = setTimeout(() => {
+        setStateValue("longPressTriggered", true);
         const rect = labelBtn.getBoundingClientRect();
         openBreakoutContextMenu({ line, x: rect.left + 8, y: rect.bottom + 6, anchorEl: labelBtn });
       }, 520);
+      patchState({
+        longPressLine: line,
+        longPressTriggered: false,
+        longPressTimer,
+      });
     }, { passive: true });
     outEl.addEventListener("touchend", () => {
       if (state.longPressTimer) {
         clearTimeout(state.longPressTimer);
-        state.longPressTimer = null;
+        setStateValue("longPressTimer", null);
       }
       if (!state.contextMenu.open) {
-        state.longPressLine = null;
-        state.longPressTriggered = false;
+        patchState({ longPressLine: null, longPressTriggered: false });
       }
     }, { passive: true });
     outEl.addEventListener("touchcancel", () => {
       if (state.longPressTimer) {
         clearTimeout(state.longPressTimer);
-        state.longPressTimer = null;
+        setStateValue("longPressTimer", null);
       }
-      state.longPressLine = null;
-      state.longPressTriggered = false;
+      patchState({ longPressLine: null, longPressTriggered: false });
     }, { passive: true });
     outEl.addEventListener("input", (ev) => {
       const input = ev.target.closest("input.breakout-inline-input[data-inline-edit-line]");
       if (!input) return;
       const line = Number(input.getAttribute("data-inline-edit-line"));
       if (!Number.isFinite(line) || line !== Number(state.inlineEditLine)) return;
-      state.inlineEditDraft = input.value;
+      setStateValue("inlineEditDraft", input.value);
     });
     outEl.addEventListener("keydown", (ev) => {
       const input = ev.target.closest("input.breakout-inline-input[data-inline-edit-line]");
@@ -6679,9 +7003,10 @@
       if (!cb || !state.model) return;
       const seriesId = String(cb.getAttribute("data-series-id") || "").trim();
       if (seriesId === "residual-total") {
-        state.plotResidualExcluded = !!cb.checked;
-        state.chartSeriesCache = new Map();
-        renderPivot();
+        patchState(
+          { plotResidualExcluded: !!cb.checked, chartSeriesCache: new Map() },
+          { requestRender: true, reason: "residual-toggle" }
+        );
         return;
       }
       const line = Number(cb.getAttribute("data-line"));
@@ -6690,8 +7015,7 @@
       for (const targetLine of targets) {
         setLineSelectedForPlot(targetLine, !cb.checked);
       }
-      state.chartSeriesCache = new Map();
-      renderPivot();
+      patchState({ chartSeriesCache: new Map() }, { requestRender: true, reason: "line-exclude-toggle" });
     });
     outEl.addEventListener("dragstart", (ev) => {
       const source = ev.target.closest(".breakout-drag-source[data-breakout-line]");
@@ -6699,10 +7023,12 @@
       const line = Number(source.getAttribute("data-breakout-line"));
       if (!Number.isFinite(line) || !isKnownTreeLine(state.model, line)) return;
       if (line === state.model.rootLine) return;
-      state.breakoutDragLine = line;
-      state.breakoutDragOverTargetLine = null;
-      state.breakoutDragOverPlacement = null;
-      state.breakoutDragMode = null;
+      patchState({
+        breakoutDragLine: line,
+        breakoutDragOverTargetLine: null,
+        breakoutDragOverPlacement: null,
+        breakoutDragMode: null,
+      });
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", `breakout-line:${line}`);
@@ -6714,9 +7040,11 @@
       const target = ev.target.closest(".breakout-drop-target-line[data-breakout-target-line]");
       if (!target || !state.model) {
         if (state.breakoutDragOverTargetLine !== null) {
-          state.breakoutDragOverTargetLine = null;
-          state.breakoutDragOverPlacement = null;
-          state.breakoutDragMode = null;
+          patchState({
+            breakoutDragOverTargetLine: null,
+            breakoutDragOverPlacement: null,
+            breakoutDragMode: null,
+          });
           applyBreakoutDragIndicators();
         }
         return;
@@ -6727,9 +7055,11 @@
         : null;
       if (!intent) {
         if (state.breakoutDragOverTargetLine !== null) {
-          state.breakoutDragOverTargetLine = null;
-          state.breakoutDragOverPlacement = null;
-          state.breakoutDragMode = null;
+          patchState({
+            breakoutDragOverTargetLine: null,
+            breakoutDragOverPlacement: null,
+            breakoutDragMode: null,
+          });
           applyBreakoutDragIndicators();
         }
         return;
@@ -6741,9 +7071,11 @@
         || state.breakoutDragOverPlacement !== intent.placement
         || state.breakoutDragMode !== intent.mode
       ) {
-        state.breakoutDragOverTargetLine = intent.targetLine;
-        state.breakoutDragOverPlacement = intent.placement;
-        state.breakoutDragMode = intent.mode;
+        patchState({
+          breakoutDragOverTargetLine: intent.targetLine,
+          breakoutDragOverPlacement: intent.placement,
+          breakoutDragMode: intent.mode,
+        });
         applyBreakoutDragIndicators();
       }
     });
@@ -6774,9 +7106,11 @@
       const related = ev.relatedTarget;
       if (related && target.contains(related)) return;
       if (state.breakoutDragOverTargetLine !== null) {
-        state.breakoutDragOverTargetLine = null;
-        state.breakoutDragOverPlacement = null;
-        state.breakoutDragMode = null;
+        patchState({
+          breakoutDragOverTargetLine: null,
+          breakoutDragOverPlacement: null,
+          breakoutDragMode: null,
+        });
         applyBreakoutDragIndicators();
       }
     });
@@ -6790,9 +7124,7 @@
       const seriesId = String(item.getAttribute("data-series-id") || "").trim();
       if (!seriesId) return;
 
-      state.dragSeriesId = seriesId;
-      state.dragOverSeriesId = null;
-      state.dragOverPlacement = null;
+      patchState({ dragSeriesId: seriesId, dragOverSeriesId: null, dragOverPlacement: null });
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", seriesId);
@@ -6807,8 +7139,7 @@
       const targetId = String(target.getAttribute("data-series-id") || "").trim();
       if (!targetId || targetId === state.dragSeriesId) {
         if (state.dragOverSeriesId !== null || state.dragOverPlacement !== null) {
-          state.dragOverSeriesId = null;
-          state.dragOverPlacement = null;
+          patchState({ dragOverSeriesId: null, dragOverPlacement: null });
           applyLegendDragIndicators();
         }
         return;
@@ -6816,8 +7147,7 @@
 
       const placement = getDropPlacement(target, ev.clientY);
       if (state.dragOverSeriesId === targetId && state.dragOverPlacement === placement) return;
-      state.dragOverSeriesId = targetId;
-      state.dragOverPlacement = placement;
+      patchState({ dragOverSeriesId: targetId, dragOverPlacement: placement });
       applyLegendDragIndicators();
     });
     outEl.addEventListener("drop", (ev) => {
@@ -6838,7 +7168,7 @@
         ? moveSeriesToIndex(sourceId, targetIdx, placement === "after")
         : false;
       clearLegendDragState();
-      if (changed) renderPivot();
+      if (changed) requestRender("legend-reorder");
     });
     outEl.addEventListener("dragleave", (ev) => {
       const target = ev.target.closest(".chart-legend-draggable");
@@ -6848,8 +7178,7 @@
 
       const targetId = String(target.getAttribute("data-series-id") || "").trim();
       if (state.dragOverSeriesId === targetId) {
-        state.dragOverSeriesId = null;
-        state.dragOverPlacement = null;
+        patchState({ dragOverSeriesId: null, dragOverPlacement: null });
         applyLegendDragIndicators();
       }
     });
@@ -6870,8 +7199,7 @@
       if (focusLineBtn && state.model) {
         const labelLine = Number(focusLineBtn.getAttribute("data-label-line"));
         if (state.longPressTriggered && Number.isFinite(labelLine) && labelLine === Number(state.longPressLine)) {
-          state.longPressTriggered = false;
-          state.longPressLine = null;
+          patchState({ longPressTriggered: false, longPressLine: null });
           return;
         }
         const line = Number(focusLineBtn.getAttribute("data-line"));
@@ -6884,9 +7212,9 @@
       if (!btn || !state.model) return;
       const line = Number(btn.getAttribute("data-line"));
       if (!Number.isFinite(line)) return;
-      if (state.expanded.has(line)) state.expanded.delete(line);
-      else state.expanded.add(line);
-      renderPivot();
+      if (state.expanded.has(line)) dispatchAction({ type: APP_ACTIONS.STATE_DELETE_SET_ENTRY, key: "expanded", setValue: line });
+      else dispatchAction({ type: APP_ACTIONS.STATE_ADD_SET_ENTRY, key: "expanded", setValue: line });
+      requestRender("tree-toggle");
     });
 
     run();
